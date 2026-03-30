@@ -19,6 +19,7 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('ArchiveControlID', 0);
         $this->RegisterPropertyInteger('RefreshSeconds', 300);
         $this->RegisterPropertyInteger('BucketMinutes', 60);
+        $this->RegisterPropertyInteger('MaxSourcePoints', 240);
 
         $this->RegisterTimer(self::TIMER_REFRESH, 0, 'EDB_UpdateVisualization($_IPS["TARGET"]);');
     }
@@ -76,15 +77,18 @@ class EnergyDashboard extends IPSModule
 
         $totals = $this->CalculateTotals($aligned);
 
+        $maxSourcePoints = max(48, $this->ReadPropertyInteger('MaxSourcePoints'));
+        $sourceChart = $this->ReduceAlignedSeries($aligned, $maxSourcePoints);
+
         $payload = [
             'title'   => $this->ReadPropertyString('Title'),
             'totals'  => $totals,
             'series'  => [
-                'labels'  => $aligned['labels'],
-                'pv'      => $aligned['pv'],
-                'grid'    => $aligned['grid'],
-                'load'    => $aligned['load'],
-                'battery' => $aligned['battery']
+                'labels'  => $sourceChart['labels'],
+                'pv'      => $sourceChart['pv'],
+                'grid'    => $sourceChart['grid'],
+                'load'    => $sourceChart['load'],
+                'battery' => $sourceChart['battery']
             ],
             'usage'   => $usageBuckets
         ];
@@ -164,6 +168,45 @@ class EnergyDashboard extends IPSModule
         }
 
         return $aligned;
+    }
+
+    private function ReduceAlignedSeries(array $aligned, int $maxPoints): array
+    {
+        $count = count($aligned['labels']);
+        if ($count <= $maxPoints) {
+            return $aligned;
+        }
+
+        $step = (int) ceil($count / $maxPoints);
+
+        $reduced = [
+            'labels'  => [],
+            'pv'      => [],
+            'grid'    => [],
+            'load'    => [],
+            'battery' => []
+        ];
+
+        for ($i = 0; $i < $count; $i += $step) {
+            $sliceEnd = min($i + $step, $count);
+
+            $reduced['labels'][] = $aligned['labels'][$sliceEnd - 1];
+            $reduced['pv'][] = round($this->AverageSlice($aligned['pv'], $i, $sliceEnd), 3);
+            $reduced['grid'][] = round($this->AverageSlice($aligned['grid'], $i, $sliceEnd), 3);
+            $reduced['load'][] = round($this->AverageSlice($aligned['load'], $i, $sliceEnd), 3);
+            $reduced['battery'][] = round($this->AverageSlice($aligned['battery'], $i, $sliceEnd), 3);
+        }
+
+        return $reduced;
+    }
+
+    private function AverageSlice(array $values, int $start, int $end): float
+    {
+        $slice = array_slice($values, $start, $end - $start);
+        if (count($slice) === 0) {
+            return 0.0;
+        }
+        return array_sum($slice) / count($slice);
     }
 
     private function CalculateTotals(array $aligned): array
