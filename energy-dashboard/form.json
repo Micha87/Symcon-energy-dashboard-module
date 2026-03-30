@@ -16,6 +16,11 @@
       "width": "400px"
     },
     {
+      "type": "CheckBox",
+      "name": "InvertPv",
+      "caption": "PV-Vorzeichen invertieren"
+    },
+    {
       "type": "SelectVariable",
       "name": "GridPowerID",
       "caption": "Netzleistung (W, Bezug + / Einspeisung -)",
@@ -24,6 +29,11 @@
         2
       ],
       "width": "400px"
+    },
+    {
+      "type": "CheckBox",
+      "name": "InvertGrid",
+      "caption": "Netz-Vorzeichen invertieren"
     },
     {
       "type": "SelectVariable",
@@ -36,6 +46,11 @@
       "width": "400px"
     },
     {
+      "type": "CheckBox",
+      "name": "InvertLoad",
+      "caption": "Verbrauch-Vorzeichen invertieren"
+    },
+    {
       "type": "SelectVariable",
       "name": "BatteryPowerID",
       "caption": "Batterie-Leistung (W, Laden - / Entladen +, optional)",
@@ -44,6 +59,11 @@
         2
       ],
       "width": "400px"
+    },
+    {
+      "type": "CheckBox",
+      "name": "InvertBattery",
+      "caption": "Batterie-Vorzeichen invertieren"
     },
     {
       "type": "PopupButton",
@@ -128,16 +148,16 @@
       "caption": "Aggregation Stromquellen",
       "options": [
         {
+          "caption": "Stündlich",
+          "value": 0
+        },
+        {
           "caption": "5 Minuten",
           "value": 5
         },
         {
           "caption": "1 Minute",
           "value": 6
-        },
-        {
-          "caption": "Stündlich",
-          "value": 0
         }
       ]
     },
@@ -167,11 +187,6 @@
     },
     {
       "type": "NumberSpinner",
-      "name": "BucketMinutes",
-      "caption": "Fallback-Balkenraster in Minuten"
-    },
-    {
-      "type": "NumberSpinner",
       "name": "MaxSourcePoints",
       "caption": "Max. Punkte Stromquellen-Chart"
     },
@@ -189,7 +204,7 @@
     },
     {
       "type": "Label",
-      "caption": "Optimiert auf AC_GetAggregatedValues und SelectVariable."
+      "caption": "Komplettversion mit AC_GetAggregatedValues, SelectVariable, Vorzeichen-Checkboxen und optionalen kWh-Zählern."
     }
   ],
   "status": [
