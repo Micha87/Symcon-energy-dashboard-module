@@ -18,11 +18,21 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('GridPowerID', 0);
         $this->RegisterPropertyInteger('LoadPowerID', 0);
         $this->RegisterPropertyInteger('BatteryPowerID', 0);
+
+        $this->RegisterPropertyInteger('PvEnergyTodayID', 0);
+        $this->RegisterPropertyInteger('GridImportTodayID', 0);
+        $this->RegisterPropertyInteger('GridExportTodayID', 0);
+        $this->RegisterPropertyInteger('LoadEnergyTodayID', 0);
+        $this->RegisterPropertyInteger('BatteryChargeTodayID', 0);
+        $this->RegisterPropertyInteger('BatteryDischargeTodayID', 0);
+
         $this->RegisterPropertyInteger('ArchiveControlID', 0);
+        $this->RegisterPropertyInteger('SourceAggregation', 5); // 5 Minuten
+        $this->RegisterPropertyInteger('UsageAggregation', 0);  // stündlich
         $this->RegisterPropertyInteger('RefreshSeconds', 300);
         $this->RegisterPropertyInteger('BucketMinutes', 60);
         $this->RegisterPropertyInteger('MaxSourcePoints', 180);
-        $this->RegisterPropertyInteger('MaxUsagePoints', 48);
+        $this->RegisterPropertyInteger('MaxUsagePoints', 24);
 
         $this->RegisterTimer(self::TIMER_REFRESH, 0, 'EDB_UpdateVisualization($_IPS["TARGET"]);');
     }
@@ -69,70 +79,123 @@ class EnergyDashboard extends IPSModule
         $start = strtotime('today');
         $end   = time();
 
-        $pvSeries      = $this->GetSeriesKw($archiveID, $pvID, $start, $end);
-        $gridSeries    = $this->GetSeriesKw($archiveID, $gridID, $start, $end);
-        $loadSeries    = $this->GetSeriesKw($archiveID, $loadID, $start, $end);
-        $batterySeries = $this->IsValidVar($batteryID) ? $this->GetSeriesKw($archiveID, $batteryID, $start, $end) : [];
-
-        $aligned = $this->AlignSeries([
-            'pv'      => $pvSeries,
-            'grid'    => $gridSeries,
-            'load'    => $loadSeries,
-            'battery' => $batterySeries
-        ]);
-
-        $totals = $this->CalculateTotals($aligned);
-
-        $sourceChart = $this->ReduceAlignedSeries(
-            $aligned,
-            max(48, $this->ReadPropertyInteger('MaxSourcePoints'))
-        );
-
-        $usageBuckets = $this->BuildUsageBuckets(
-            $aligned,
-            max(15, $this->ReadPropertyInteger('BucketMinutes'))
-        );
-
-        $usageBuckets = $this->ReduceUsageBuckets(
-            $usageBuckets,
-            max(8, $this->ReadPropertyInteger('MaxUsagePoints'))
-        );
+        $sourceChart = $this->BuildSourceChartData($archiveID, $start, $end);
+        $usageChart  = $this->BuildUsageChartData($archiveID, $start, $end);
+        $totals      = $this->CalculateTotalsFromSourceData($sourceChart);
+        $totals      = $this->OverrideTotalsWithTodayCounters($totals);
 
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart));
-        $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageBuckets));
+        $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart));
     }
 
-    private function IsValidVar(int $id): bool
+    private function BuildSourceChartData(int $archiveID, int $start, int $end): array
     {
-        return $id > 0 && @IPS_VariableExists($id);
+        $aggregation = $this->ReadPropertyInteger('SourceAggregation');
+
+        $result = [
+            'labels'  => [],
+            'pv'      => [],
+            'grid'    => [],
+            'load'    => [],
+            'battery' => []
+        ];
+
+        $pvRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end);
+        $gridRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end);
+        $loadRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end);
+        $batteryRows = $this->IsValidVar($this->ReadPropertyInteger('BatteryPowerID'))
+            ? $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end)
+            : [];
+
+        $aligned = $this->AlignSeriesByTimestamp([
+            'pv'      => $pvRows,
+            'grid'    => $gridRows,
+            'load'    => $loadRows,
+            'battery' => $batteryRows
+        ]);
+
+        $aligned = $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
+        return $aligned;
     }
 
-    private function GetArchiveId(): int
+    private function BuildUsageChartData(int $archiveID, int $start, int $end): array
     {
-        $configured = $this->ReadPropertyInteger('ArchiveControlID');
-        if ($configured > 0 && @IPS_InstanceExists($configured)) {
-            return $configured;
+        $aggregation = $this->ReadPropertyInteger('UsageAggregation');
+
+        $pvRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end);
+        $gridRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end);
+        $loadRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end);
+        $batteryRows = $this->IsValidVar($this->ReadPropertyInteger('BatteryPowerID'))
+            ? $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end)
+            : [];
+
+        $aligned = $this->AlignSeriesByTimestamp([
+            'pv'      => $pvRows,
+            'grid'    => $gridRows,
+            'load'    => $loadRows,
+            'battery' => $batteryRows
+        ]);
+
+        $buckets = [];
+        $count = count($aligned['timestamps']);
+        if ($count < 2) {
+            return [];
         }
 
-        $list = IPS_GetInstanceListByModuleID('{43192F0B-135B-4CE7-A0A7-1475603F3060}');
-        return count($list) > 0 ? $list[0] : 0;
+        for ($i = 1; $i < $count; $i++) {
+            $from = (int) $aligned['timestamps'][$i - 1];
+            $to   = (int) $aligned['timestamps'][$i];
+            $dtHours = max(1 / 60, ($to - $from) / 3600.0);
+
+            $pv      = max(0.0, (float) $aligned['pv'][$i - 1]);
+            $grid    = (float) $aligned['grid'][$i - 1];
+            $load    = max(0.0, (float) $aligned['load'][$i - 1]);
+            $battery = (float) $aligned['battery'][$i - 1];
+
+            $buckets[] = [
+                'label'            => date('H:i', $from),
+                'pvToLoad'         => round(min($pv, $load) * $dtHours, 3),
+                'gridImport'       => round(max(0.0, $grid) * $dtHours, 3),
+                'batteryCharge'    => round(max(0.0, -$battery) * $dtHours, 3),
+                'batteryDischarge' => round(max(0.0, $battery) * $dtHours, 3),
+                'gridExport'       => round(max(0.0, -$grid) * $dtHours, 3)
+            ];
+        }
+
+        $buckets = $this->ReduceUsageBuckets($buckets, max(8, $this->ReadPropertyInteger('MaxUsagePoints')));
+        return $buckets;
     }
 
-    private function GetSeriesKw(int $archiveID, int $varID, int $start, int $end): array
+    private function GetAggregatedSeriesKw(int $archiveID, int $varID, int $aggregation, int $start, int $end): array
     {
-        $values = AC_GetLoggedValues($archiveID, $varID, $start, $end, 0);
+        if (!$this->IsValidVar($varID)) {
+            return [];
+        }
+
+        $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $start, $end, 0);
+        if (!is_array($rows)) {
+            return [];
+        }
+
         $result = [];
-
-        foreach ($values as $row) {
+        foreach ($rows as $row) {
             $ts = (int) $row['TimeStamp'];
-            $result[$ts] = round(((float) $row['Value']) / 1000.0, 3);
+            if (isset($row['Avg'])) {
+                $value = (float) $row['Avg'];
+            } elseif (isset($row['Value'])) {
+                $value = (float) $row['Value'];
+            } else {
+                continue;
+            }
+            $result[$ts] = round($value / 1000.0, 3);
         }
 
+        ksort($result);
         return $result;
     }
 
-    private function AlignSeries(array $series): array
+    private function AlignSeriesByTimestamp(array $series): array
     {
         $allTimestamps = [];
         foreach ($series as $rows) {
@@ -145,11 +208,12 @@ class EnergyDashboard extends IPSModule
         $timestamps = array_keys($allTimestamps);
 
         $aligned = [
-            'labels'  => [],
-            'pv'      => [],
-            'grid'    => [],
-            'load'    => [],
-            'battery' => []
+            'timestamps' => [],
+            'labels'     => [],
+            'pv'         => [],
+            'grid'       => [],
+            'load'       => [],
+            'battery'    => []
         ];
 
         $last = [
@@ -160,7 +224,9 @@ class EnergyDashboard extends IPSModule
         ];
 
         foreach ($timestamps as $ts) {
+            $aligned['timestamps'][] = $ts;
             $aligned['labels'][] = date('H:i', $ts);
+
             foreach (['pv', 'grid', 'load', 'battery'] as $name) {
                 if (isset($series[$name][$ts])) {
                     $last[$name] = $series[$name][$ts];
@@ -181,21 +247,23 @@ class EnergyDashboard extends IPSModule
 
         $step = (int) ceil($count / $maxPoints);
         $reduced = [
-            'labels'  => [],
-            'pv'      => [],
-            'grid'    => [],
-            'load'    => [],
-            'battery' => []
+            'timestamps' => [],
+            'labels'     => [],
+            'pv'         => [],
+            'grid'       => [],
+            'load'       => [],
+            'battery'    => []
         ];
 
         for ($i = 0; $i < $count; $i += $step) {
             $sliceEnd = min($i + $step, $count);
 
-            $reduced['labels'][]  = $aligned['labels'][$sliceEnd - 1];
-            $reduced['pv'][]      = round($this->AverageSlice($aligned['pv'], $i, $sliceEnd), 3);
-            $reduced['grid'][]    = round($this->AverageSlice($aligned['grid'], $i, $sliceEnd), 3);
-            $reduced['load'][]    = round($this->AverageSlice($aligned['load'], $i, $sliceEnd), 3);
-            $reduced['battery'][] = round($this->AverageSlice($aligned['battery'], $i, $sliceEnd), 3);
+            $reduced['timestamps'][] = $aligned['timestamps'][$sliceEnd - 1];
+            $reduced['labels'][]     = $aligned['labels'][$sliceEnd - 1];
+            $reduced['pv'][]         = round($this->AverageSlice($aligned['pv'], $i, $sliceEnd), 3);
+            $reduced['grid'][]       = round($this->AverageSlice($aligned['grid'], $i, $sliceEnd), 3);
+            $reduced['load'][]       = round($this->AverageSlice($aligned['load'], $i, $sliceEnd), 3);
+            $reduced['battery'][]    = round($this->AverageSlice($aligned['battery'], $i, $sliceEnd), 3);
         }
 
         return $reduced;
@@ -228,22 +296,7 @@ class EnergyDashboard extends IPSModule
         return $reduced;
     }
 
-    private function SumColumn(array $rows, string $column): float
-    {
-        $sum = 0.0;
-        foreach ($rows as $row) {
-            $sum += (float) $row[$column];
-        }
-        return $sum;
-    }
-
-    private function AverageSlice(array $values, int $start, int $end): float
-    {
-        $slice = array_slice($values, $start, $end - $start);
-        return count($slice) === 0 ? 0.0 : array_sum($slice) / count($slice);
-    }
-
-    private function CalculateTotals(array $aligned): array
+    private function CalculateTotalsFromSourceData(array $sourceChart): array
     {
         $pvEnergy = 0.0;
         $gridImport = 0.0;
@@ -252,7 +305,7 @@ class EnergyDashboard extends IPSModule
         $batteryCharge = 0.0;
         $batteryDischarge = 0.0;
 
-        $count = count($aligned['labels']);
+        $count = count($sourceChart['timestamps']);
         if ($count < 2) {
             return [
                 'pv' => 0.0,
@@ -268,12 +321,14 @@ class EnergyDashboard extends IPSModule
         }
 
         for ($i = 1; $i < $count; $i++) {
-            $dtHours = $this->DeltaHours($aligned['labels'][$i - 1], $aligned['labels'][$i]);
+            $from = (int) $sourceChart['timestamps'][$i - 1];
+            $to   = (int) $sourceChart['timestamps'][$i];
+            $dtHours = max(1 / 60, ($to - $from) / 3600.0);
 
-            $pv      = max(0.0, (float) $aligned['pv'][$i - 1]);
-            $grid    = (float) $aligned['grid'][$i - 1];
-            $load    = max(0.0, (float) $aligned['load'][$i - 1]);
-            $battery = (float) $aligned['battery'][$i - 1];
+            $pv      = max(0.0, (float) $sourceChart['pv'][$i - 1]);
+            $grid    = (float) $sourceChart['grid'][$i - 1];
+            $load    = max(0.0, (float) $sourceChart['load'][$i - 1]);
+            $battery = (float) $sourceChart['battery'][$i - 1];
 
             $pvEnergy += $pv * $dtHours;
             $loadEnergy += $load * $dtHours;
@@ -309,72 +364,46 @@ class EnergyDashboard extends IPSModule
         ];
     }
 
-    private function DeltaHours(string $from, string $to): float
+    private function OverrideTotalsWithTodayCounters(array $totals): array
     {
-        $fromTs = strtotime(date('Y-m-d') . ' ' . $from . ':00');
-        $toTs   = strtotime(date('Y-m-d') . ' ' . $to . ':00');
+        $map = [
+            'pv'               => 'PvEnergyTodayID',
+            'gridImport'       => 'GridImportTodayID',
+            'gridExport'       => 'GridExportTodayID',
+            'load'             => 'LoadEnergyTodayID',
+            'batteryCharge'    => 'BatteryChargeTodayID',
+            'batteryDischarge' => 'BatteryDischargeTodayID'
+        ];
 
-        if ($toTs <= $fromTs) {
-            $toTs = $fromTs + 300;
+        foreach ($map as $key => $property) {
+            $id = $this->ReadPropertyInteger($property);
+            if ($this->IsValidVar($id)) {
+                $totals[$key] = round((float) GetValue($id), 2);
+            }
         }
 
-        return ($toTs - $fromTs) / 3600.0;
+        $totals['selfConsumption'] = round(max(0.0, $totals['pv'] - $totals['gridExport']), 2);
+        $totals['netUsage'] = round($totals['load'] - $totals['gridExport'], 2);
+        $totals['autarky'] = $totals['load'] > 0
+            ? round(min(100.0, max(0.0, (($totals['load'] - $totals['gridImport']) / $totals['load']) * 100.0)), 1)
+            : 0.0;
+
+        return $totals;
     }
 
-    private function BuildUsageBuckets(array $aligned, int $bucketMinutes): array
+    private function SumColumn(array $rows, string $column): float
     {
-        $buckets = [];
-        $count = count($aligned['labels']);
-        if ($count < 2) {
-            return [];
+        $sum = 0.0;
+        foreach ($rows as $row) {
+            $sum += (float) $row[$column];
         }
-
-        for ($i = 1; $i < $count; $i++) {
-            $label = $aligned['labels'][$i - 1];
-            $bucketKey = $this->BucketLabel($label, $bucketMinutes);
-
-            if (!isset($buckets[$bucketKey])) {
-                $buckets[$bucketKey] = [
-                    'label'            => $bucketKey,
-                    'pvToLoad'         => 0.0,
-                    'gridImport'       => 0.0,
-                    'batteryCharge'    => 0.0,
-                    'batteryDischarge' => 0.0,
-                    'gridExport'       => 0.0
-                ];
-            }
-
-            $dtHours = $this->DeltaHours($aligned['labels'][$i - 1], $aligned['labels'][$i]);
-
-            $pv      = max(0.0, (float) $aligned['pv'][$i - 1]);
-            $grid    = (float) $aligned['grid'][$i - 1];
-            $load    = max(0.0, (float) $aligned['load'][$i - 1]);
-            $battery = (float) $aligned['battery'][$i - 1];
-
-            $buckets[$bucketKey]['pvToLoad']         += min($pv, $load) * $dtHours;
-            $buckets[$bucketKey]['gridImport']       += max(0.0, $grid) * $dtHours;
-            $buckets[$bucketKey]['batteryCharge']    += max(0.0, -$battery) * $dtHours;
-            $buckets[$bucketKey]['batteryDischarge'] += max(0.0, $battery) * $dtHours;
-            $buckets[$bucketKey]['gridExport']       += max(0.0, -$grid) * $dtHours;
-        }
-
-        return array_values(array_map(function ($row) {
-            foreach ($row as $k => $v) {
-                if ($k !== 'label') {
-                    $row[$k] = round((float) $v, 3);
-                }
-            }
-            return $row;
-        }, $buckets));
+        return $sum;
     }
 
-    private function BucketLabel(string $timeLabel, int $bucketMinutes): string
+    private function AverageSlice(array $values, int $start, int $end): float
     {
-        [$h, $m] = explode(':', $timeLabel);
-        $minutes = ((int) $h * 60) + (int) $m;
-        $bucket  = (int) floor($minutes / $bucketMinutes) * $bucketMinutes;
-
-        return sprintf('%02d:%02d', (int) floor($bucket / 60), $bucket % 60);
+        $slice = array_slice($values, $start, $end - $start);
+        return count($slice) === 0 ? 0.0 : array_sum($slice) / count($slice);
     }
 
     private function GetOverviewHtml(array $t): string
@@ -418,7 +447,13 @@ HTML;
 
     private function GetSourcesHtml(array $data): string
     {
-        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode([
+            'labels'  => $data['labels'],
+            'pv'      => $data['pv'],
+            'grid'    => $data['grid'],
+            'load'    => $data['load'],
+            'battery' => $data['battery']
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
 
         return <<<HTML
