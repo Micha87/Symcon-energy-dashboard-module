@@ -39,6 +39,11 @@
       "type": "NumberSpinner",
       "name": "BucketMinutes",
       "caption": "Balkenraster in Minuten"
+    },
+    {
+      "type": "NumberSpinner",
+      "name": "MaxSourcePoints",
+      "caption": "Max. Punkte Stromquellen-Chart"
     }
   ],
   "actions": [
