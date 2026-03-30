@@ -13,7 +13,7 @@
         1,
         2
       ],
-      "width": "400px"
+      "width": "420px"
     },
     {
       "type": "CheckBox",
@@ -28,7 +28,7 @@
         1,
         2
       ],
-      "width": "400px"
+      "width": "420px"
     },
     {
       "type": "CheckBox",
@@ -43,7 +43,7 @@
         1,
         2
       ],
-      "width": "400px"
+      "width": "420px"
     },
     {
       "type": "CheckBox",
@@ -53,12 +53,12 @@
     {
       "type": "SelectVariable",
       "name": "BatteryPowerID",
-      "caption": "Batterie-Leistung (W, Laden - / Entladen +, optional)",
+      "caption": "Batterie-Leistung (W, optional)",
       "validVariableTypes": [
         1,
         2
       ],
-      "width": "400px"
+      "width": "420px"
     },
     {
       "type": "CheckBox",
@@ -66,76 +66,154 @@
       "caption": "Batterie-Vorzeichen invertieren"
     },
     {
-      "type": "PopupButton",
-      "caption": "Optionale kWh-Zähler",
-      "popup": {
-        "items": [
-          {
-            "type": "Label",
-            "caption": "Wenn gesetzt, überschreiben diese Tageszähler die aus Leistung berechneten Übersichtswerte."
-          },
-          {
-            "type": "SelectVariable",
-            "name": "PvEnergyTodayID",
-            "caption": "PV heute (kWh)",
-            "validVariableTypes": [
-              1,
-              2
-            ],
-            "width": "400px"
-          },
-          {
-            "type": "SelectVariable",
-            "name": "GridImportTodayID",
-            "caption": "Netzbezug heute (kWh)",
-            "validVariableTypes": [
-              1,
-              2
-            ],
-            "width": "400px"
-          },
-          {
-            "type": "SelectVariable",
-            "name": "GridExportTodayID",
-            "caption": "Einspeisung heute (kWh)",
-            "validVariableTypes": [
-              1,
-              2
-            ],
-            "width": "400px"
-          },
-          {
-            "type": "SelectVariable",
-            "name": "LoadEnergyTodayID",
-            "caption": "Verbrauch heute (kWh)",
-            "validVariableTypes": [
-              1,
-              2
-            ],
-            "width": "400px"
-          },
-          {
-            "type": "SelectVariable",
-            "name": "BatteryChargeTodayID",
-            "caption": "Batterie Laden heute (kWh)",
-            "validVariableTypes": [
-              1,
-              2
-            ],
-            "width": "400px"
-          },
-          {
-            "type": "SelectVariable",
-            "name": "BatteryDischargeTodayID",
-            "caption": "Batterie Entladen heute (kWh)",
-            "validVariableTypes": [
-              1,
-              2
-            ],
-            "width": "400px"
-          }
-        ]
-      }
+      "type": "ExpansionPanel",
+      "caption": "Historische Tages-kWh",
+      "items": [
+        {
+          "type": "CheckBox",
+          "name": "UseHistoricalDayEnergy",
+          "caption": "Historische Tages-kWh für Übersicht verwenden"
+        },
+        {
+          "type": "Label",
+          "caption": "Wenn für den gewählten Tag geloggte Tageswerte vorhanden sind, werden diese bevorzugt verwendet."
+        },
+        {
+          "type": "SelectVariable",
+          "name": "PvEnergyDayID",
+          "caption": "PV Tages-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "GridImportEnergyDayID",
+          "caption": "Netzbezug Tages-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "GridExportEnergyDayID",
+          "caption": "Einspeisung Tages-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "LoadEnergyDayID",
+          "caption": "Verbrauch Tages-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryChargeEnergyDayID",
+          "caption": "Batterie Laden Tages-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryDischargeEnergyDayID",
+          "caption": "Batterie Entladen Tages-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
+      "caption": "Historische kWh-Gesamtzähler",
+      "items": [
+        {
+          "type": "CheckBox",
+          "name": "UseHistoricalCounterDiff",
+          "caption": "Bei fehlenden Tages-kWh Zählerdifferenz verwenden"
+        },
+        {
+          "type": "Label",
+          "caption": "Tageswert = Zählerstand Tagesende minus Zählerstand Tagesanfang."
+        },
+        {
+          "type": "SelectVariable",
+          "name": "PvEnergyTotalID",
+          "caption": "PV Gesamt-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "GridImportEnergyTotalID",
+          "caption": "Netzbezug Gesamt-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "GridExportEnergyTotalID",
+          "caption": "Einspeisung Gesamt-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "LoadEnergyTotalID",
+          "caption": "Verbrauch Gesamt-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryChargeEnergyTotalID",
+          "caption": "Batterie Laden Gesamt-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryDischargeEnergyTotalID",
+          "caption": "Batterie Entladen Gesamt-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        }
+      ]
     },
     {
       "type": "NumberSpinner",
@@ -203,8 +281,23 @@
       "onClick": "EDB_UpdateVisualization($id);"
     },
     {
+      "type": "Button",
+      "caption": "Heute anzeigen",
+      "onClick": "EDB_GoToToday($id);"
+    },
+    {
+      "type": "Button",
+      "caption": "Vortag",
+      "onClick": "EDB_PreviousDay($id);"
+    },
+    {
+      "type": "Button",
+      "caption": "Nächster Tag",
+      "onClick": "EDB_NextDay($id);"
+    },
+    {
       "type": "Label",
-      "caption": "Komplettversion mit AC_GetAggregatedValues, SelectVariable, Vorzeichen-Checkboxen und optionalen kWh-Zählern."
+      "caption": "IDs werden komplett über das Formular gewählt. Historische Tages-kWh werden bevorzugt, danach optional Zählerdifferenz, danach Leistungsintegration."
     }
   ],
   "status": [
