@@ -765,7 +765,7 @@ class EnergyDashboard extends IPSModule
         $mode = $this->ReadAttributeString('PeriodMode');
         $viewMode = $this->GetConfiguredViewMode($mode, 'sources');
 
-        if ($mode === 'day' || ($mode === 'week' && $viewMode === 'hours') || ($mode === 'month' && $viewMode === 'hours') || ($mode === 'year' && $viewMode === 'hours')) {
+        if ($mode === 'day' || ($mode === 'week' && $viewMode === 'hours')) {
             $aggregation = $this->ReadPropertyInteger('SourceAggregation');
             $aligned = $this->AlignSeriesByTimestamp([
                 'pv' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertPv')),
@@ -777,6 +777,19 @@ class EnergyDashboard extends IPSModule
             $aligned['unit'] = 'kW';
             $aligned['chartType'] = 'line';
             return $aligned;
+        }
+
+        if (($mode === 'month' || $mode === 'year') && $viewMode === 'hours') {
+            $rows = $this->BuildPeriodEnergyRows($archiveID, $start, $end, $mode, ($mode === 'month' ? 'days' : 'weeks'));
+            $series = ['labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => [], 'unit' => 'kWh', 'chartType' => 'line'];
+            foreach ($rows as $row) {
+                $series['labels'][] = $row['label'];
+                $series['pv'][] = round((float) $row['pv'], 2);
+                $series['grid'][] = round((float) $row['grid'], 2);
+                $series['load'][] = round((float) $row['load'], 2);
+                $series['battery'][] = round((float) $row['battery'], 2);
+            }
+            return $series;
         }
 
         $rows = $this->BuildPeriodEnergyRows($archiveID, $start, $end, $mode, $viewMode);
@@ -935,11 +948,30 @@ class EnergyDashboard extends IPSModule
     private function GetSourcesHtml(array $data, string $label): string
     {
         $unit = $data['unit'] ?? 'kW';
-        $json = json_encode(['labels' => $data['labels'], 'pv' => $data['pv'], 'grid' => $data['grid'], 'load' => $data['load'], 'battery' => $data['battery']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $chartType = $data['chartType'] ?? 'line';
+        $json = json_encode([
+            'labels' => $data['labels'],
+            'pv' => $data['pv'],
+            'grid' => $data['grid'],
+            'load' => $data['load'],
+            'battery' => $data['battery']
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
         $labelEsc = htmlspecialchars($label);
         $unitEsc = htmlspecialchars($unit);
-        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;"><style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style><div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script>(function(){const d=' . $json . ';new Chart(document.getElementById("edbSourceChart"),{type:"line",data:{labels:d.labels,datasets:[{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:false,tension:.25,pointRadius:0},{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.06)",fill:false,tension:.2,pointRadius:0},{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.85)",backgroundColor:"rgba(0,0,0,0)",borderDash:[6,4],tension:.2,pointRadius:0},{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.06)",tension:.2,pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:12}}}}});})();</script></div>';
+        $typeEsc = htmlspecialchars($chartType);
+
+        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
+            . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
+            . '<div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div>'
+            . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
+            . '<script>(function(){const d=' . $json . '; const chartType="' . $typeEsc . '"; new Chart(document.getElementById("edbSourceChart"),{type:chartType,data:{labels:d.labels,datasets:['
+            . '{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:false,tension:.25,pointRadius:0},'
+            . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0},'
+            . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.85)",backgroundColor:"rgba(0,0,0,.08)",borderDash:[6,4],tension:.2,pointRadius:0},'
+            . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.2,pointRadius:0}'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' + $unitEsc + '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 20 ? 20 : 12), autoSkip:true, maxRotation:0, minRotation:0}}}}});})();</script>'
+            . '</div>';
     }
 
     private function GetUsageHtml(array $data, array $totals, string $label): string
