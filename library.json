@@ -1,8 +1,7 @@
 {
   "id": "{D7A2F0A1-5C79-4C2D-9E2A-6B0A9B7D1001}",
-  "author": "OpenAI",
+  "author": "Michael Westphal",
   "name": "SymconEnergyDashboard",
-  "url": "https://openai.com",
   "version": "1.0",
   "build": 1,
   "date": 20260330
