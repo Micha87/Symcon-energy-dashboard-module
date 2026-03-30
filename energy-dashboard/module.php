@@ -56,6 +56,13 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('MaxSourcePoints', 180);
         $this->RegisterPropertyInteger('MaxUsagePoints', 24);
 
+        $this->RegisterPropertyString('ViewModeWeekSources', 'hours');
+        $this->RegisterPropertyString('ViewModeWeekUsage', 'hours');
+        $this->RegisterPropertyString('ViewModeMonthSources', 'days');
+        $this->RegisterPropertyString('ViewModeMonthUsage', 'days');
+        $this->RegisterPropertyString('ViewModeYearSources', 'weeks');
+        $this->RegisterPropertyString('ViewModeYearUsage', 'weeks');
+
         $this->RegisterAttributeString('PeriodMode', 'day');
         $this->RegisterAttributeInteger('ReferenceTimestamp', 0);
 
@@ -446,7 +453,7 @@ class EnergyDashboard extends IPSModule
         ]);
     }
 
-    private function BuildPeriodEnergyRows(int $archiveID, int $rangeStart, int $rangeEnd, string $mode): array
+    private function BuildPeriodEnergyRows(int $archiveID, int $rangeStart, int $rangeEnd, string $mode, string $viewMode): array
     {
         $daily = [];
         for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
@@ -461,28 +468,68 @@ class EnergyDashboard extends IPSModule
             ];
         }
 
-        if ($mode === 'year') {
+        if ($mode === 'week' && $viewMode === 'days') {
+            return $daily;
+        }
+        if ($mode === 'month' && $viewMode === 'days') {
+            return $daily;
+        }
+        if ($mode === 'month' && $viewMode === 'weeks') {
+            $weeks = [];
+            foreach ($daily as $row) {
+                $key = date('o-W', $row['ts']);
+                if (!isset($weeks[$key])) {
+                    $weeks[$key] = ['label' => 'KW ' . date('W', $row['ts']), 'pv' => 0.0, 'grid' => 0.0, 'load' => 0.0, 'battery' => 0.0];
+                }
+                foreach (['pv','grid','load','battery'] as $k) {
+                    $weeks[$key][$k] += $row[$k];
+                }
+            }
+            foreach ($weeks as &$r) {
+                foreach (['pv','grid','load','battery'] as $k) $r[$k] = round($r[$k], 2);
+            }
+            unset($r);
+            return array_values($weeks);
+        }
+        if ($mode === 'year' && $viewMode === 'weeks') {
+            $weeks = [];
+            foreach ($daily as $row) {
+                $key = date('o-W', $row['ts']);
+                if (!isset($weeks[$key])) {
+                    $weeks[$key] = ['label' => 'KW ' . date('W', $row['ts']), 'pv' => 0.0, 'grid' => 0.0, 'load' => 0.0, 'battery' => 0.0];
+                }
+                foreach (['pv','grid','load','battery'] as $k) {
+                    $weeks[$key][$k] += $row[$k];
+                }
+            }
+            foreach ($weeks as &$r) {
+                foreach (['pv','grid','load','battery'] as $k) $r[$k] = round($r[$k], 2);
+            }
+            unset($r);
+            return array_values($weeks);
+        }
+        if ($mode === 'year' && $viewMode === 'months') {
             $months = [];
             foreach ($daily as $row) {
                 $key = date('Y-m', $row['ts']);
                 if (!isset($months[$key])) {
                     $months[$key] = ['label' => date('M', $row['ts']), 'pv' => 0.0, 'grid' => 0.0, 'load' => 0.0, 'battery' => 0.0];
                 }
-                $months[$key]['pv'] += $row['pv'];
-                $months[$key]['grid'] += $row['grid'];
-                $months[$key]['load'] += $row['load'];
-                $months[$key]['battery'] += $row['battery'];
+                foreach (['pv','grid','load','battery'] as $k) {
+                    $months[$key][$k] += $row[$k];
+                }
             }
-            return array_values(array_map(function($r) {
-                foreach (['pv','grid','load','battery'] as $k) { $r[$k] = round($r[$k], 2); }
-                return $r;
-            }, $months));
+            foreach ($months as &$r) {
+                foreach (['pv','grid','load','battery'] as $k) $r[$k] = round($r[$k], 2);
+            }
+            unset($r);
+            return array_values($months);
         }
 
         return $daily;
     }
 
-    private function BuildPeriodUsageRows(int $archiveID, int $rangeStart, int $rangeEnd, string $mode): array
+    private function BuildPeriodUsageRows(int $archiveID, int $rangeStart, int $rangeEnd, string $mode, string $viewMode): array
     {
         $rows = [];
         for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
@@ -498,7 +545,40 @@ class EnergyDashboard extends IPSModule
             ];
         }
 
-        if ($mode === 'year') {
+        if (($mode === 'week' && $viewMode === 'days') || ($mode === 'month' && $viewMode === 'days')) {
+            return $rows;
+        }
+        if ($mode === 'month' && $viewMode === 'weeks') {
+            $weeks = [];
+            foreach ($rows as $row) {
+                $key = date('o-W', $row['ts']);
+                if (!isset($weeks[$key])) {
+                    $weeks[$key] = ['label' => 'KW ' . date('W', $row['ts']), 'pvToLoad' => 0.0, 'gridImport' => 0.0, 'batteryCharge' => 0.0, 'batteryDischarge' => 0.0, 'gridExport' => 0.0];
+                }
+                foreach (['pvToLoad','gridImport','batteryCharge','batteryDischarge','gridExport'] as $k) {
+                    $weeks[$key][$k] += $row[$k];
+                }
+            }
+            foreach ($weeks as &$r) foreach (['pvToLoad','gridImport','batteryCharge','batteryDischarge','gridExport'] as $k) $r[$k] = round($r[$k], 3);
+            unset($r);
+            return array_values($weeks);
+        }
+        if ($mode === 'year' && $viewMode === 'weeks') {
+            $weeks = [];
+            foreach ($rows as $row) {
+                $key = date('o-W', $row['ts']);
+                if (!isset($weeks[$key])) {
+                    $weeks[$key] = ['label' => 'KW ' . date('W', $row['ts']), 'pvToLoad' => 0.0, 'gridImport' => 0.0, 'batteryCharge' => 0.0, 'batteryDischarge' => 0.0, 'gridExport' => 0.0];
+                }
+                foreach (['pvToLoad','gridImport','batteryCharge','batteryDischarge','gridExport'] as $k) {
+                    $weeks[$key][$k] += $row[$k];
+                }
+            }
+            foreach ($weeks as &$r) foreach (['pvToLoad','gridImport','batteryCharge','batteryDischarge','gridExport'] as $k) $r[$k] = round($r[$k], 3);
+            unset($r);
+            return array_values($weeks);
+        }
+        if ($mode === 'year' && $viewMode === 'months') {
             $months = [];
             foreach ($rows as $row) {
                 $key = date('Y-m', $row['ts']);
@@ -509,13 +589,9 @@ class EnergyDashboard extends IPSModule
                     $months[$key][$k] += $row[$k];
                 }
             }
-            $rows = array_values($months);
-            foreach ($rows as &$r) {
-                foreach (['pvToLoad','gridImport','batteryCharge','batteryDischarge','gridExport'] as $k) {
-                    $r[$k] = round($r[$k], 3);
-                }
-            }
+            foreach ($months as &$r) foreach (['pvToLoad','gridImport','batteryCharge','batteryDischarge','gridExport'] as $k) $r[$k] = round($r[$k], 3);
             unset($r);
+            return array_values($months);
         }
 
         return $rows;
@@ -663,11 +739,33 @@ class EnergyDashboard extends IPSModule
         return $result;
     }
 
+
+    private function GetConfiguredViewMode(string $mode, string $chart): string
+    {
+        $property = '';
+        if ($mode === 'week') {
+            $property = ($chart === 'sources') ? 'ViewModeWeekSources' : 'ViewModeWeekUsage';
+        } elseif ($mode === 'month') {
+            $property = ($chart === 'sources') ? 'ViewModeMonthSources' : 'ViewModeMonthUsage';
+        } elseif ($mode === 'year') {
+            $property = ($chart === 'sources') ? 'ViewModeYearSources' : 'ViewModeYearUsage';
+        } else {
+            return 'hours';
+        }
+
+        $value = $this->ReadPropertyString($property);
+        if ($value === '') {
+            return ($mode === 'year') ? 'weeks' : (($mode === 'month') ? 'days' : 'hours');
+        }
+        return $value;
+    }
+
     private function BuildSourceChartData(int $archiveID, int $start, int $end): array
     {
         $mode = $this->ReadAttributeString('PeriodMode');
+        $viewMode = $this->GetConfiguredViewMode($mode, 'sources');
 
-        if ($mode === 'day') {
+        if ($mode === 'day' || ($mode === 'week' && $viewMode === 'hours') || ($mode === 'month' && $viewMode === 'hours') || ($mode === 'year' && $viewMode === 'hours')) {
             $aggregation = $this->ReadPropertyInteger('SourceAggregation');
             $aligned = $this->AlignSeriesByTimestamp([
                 'pv' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertPv')),
@@ -677,11 +775,12 @@ class EnergyDashboard extends IPSModule
             ]);
             $aligned = $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
             $aligned['unit'] = 'kW';
+            $aligned['chartType'] = 'line';
             return $aligned;
         }
 
-        $rows = $this->BuildPeriodEnergyRows($archiveID, $start, $end, $mode);
-        $series = ['labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => [], 'unit' => 'kWh'];
+        $rows = $this->BuildPeriodEnergyRows($archiveID, $start, $end, $mode, $viewMode);
+        $series = ['labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => [], 'unit' => 'kWh', 'chartType' => (($mode === 'month' || $mode === 'year') ? 'bar' : 'line')];
         foreach ($rows as $row) {
             $series['labels'][] = $row['label'];
             $series['pv'][] = round((float) $row['pv'], 2);
@@ -695,8 +794,9 @@ class EnergyDashboard extends IPSModule
     private function BuildUsageChartData(int $archiveID, int $start, int $end): array
     {
         $mode = $this->ReadAttributeString('PeriodMode');
+        $viewMode = $this->GetConfiguredViewMode($mode, 'usage');
 
-        if ($mode === 'day') {
+        if ($mode === 'day' || ($mode === 'week' && $viewMode === 'hours') || ($mode === 'month' && $viewMode === 'hours') || ($mode === 'year' && $viewMode === 'hours')) {
             $aggregation = $this->ReadPropertyInteger('UsageAggregation');
             $aligned = $this->AlignSeriesByTimestamp([
                 'pv' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertPv')),
@@ -728,7 +828,7 @@ class EnergyDashboard extends IPSModule
             return $this->ReduceUsageBuckets($buckets, max(8, $this->ReadPropertyInteger('MaxUsagePoints')));
         }
 
-        $rows = $this->BuildPeriodUsageRows($archiveID, $start, $end, $mode);
+        $rows = $this->BuildPeriodUsageRows($archiveID, $start, $end, $mode, $viewMode);
         return $this->ReduceUsageBuckets($rows, max(8, $this->ReadPropertyInteger('MaxUsagePoints')));
     }
 
