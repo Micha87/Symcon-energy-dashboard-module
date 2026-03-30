@@ -44,6 +44,11 @@
       "type": "NumberSpinner",
       "name": "MaxSourcePoints",
       "caption": "Max. Punkte Stromquellen-Chart"
+    },
+    {
+      "type": "NumberSpinner",
+      "name": "MaxUsagePoints",
+      "caption": "Max. Punkte Stromnutzung-Chart"
     }
   ],
   "actions": [
@@ -54,7 +59,7 @@
     },
     {
       "type": "Label",
-      "caption": "Es werden drei separate ~HTMLBox Variablen erzeugt: Verbrauchsübersicht, Stromquellen, Stromnutzung."
+      "caption": "Diese Version rendert alles direkt aus String-Variablen. Keine assets-Dateien erforderlich."
     }
   ],
   "status": [
