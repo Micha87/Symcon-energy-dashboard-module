@@ -54,7 +54,7 @@
     },
     {
       "type": "Label",
-      "caption": "Hinweis: Die Variable 'Visualization' wird automatisch als ~HTMLBox erzeugt."
+      "caption": "Es werden drei separate ~HTMLBox Variablen erzeugt: Verbrauchsübersicht, Stromquellen, Stromnutzung."
     }
   ],
   "status": [
