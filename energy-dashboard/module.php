@@ -11,7 +11,9 @@ class EnergyDashboard extends IPSModule
 
     private const IDENT_PERIOD_MODE = 'WF_PeriodMode';
     private const IDENT_REFERENCE_DATE = 'WF_ReferenceDate';
-    private const IDENT_ACTION = 'WF_Action';
+    private const IDENT_ACTION_PREV = 'WF_ActionPrev';
+    private const IDENT_ACTION_TODAY = 'WF_ActionToday';
+    private const IDENT_ACTION_NEXT = 'WF_ActionNext';
 
     private const TIMER_REFRESH  = 'Refresh';
 
@@ -74,7 +76,9 @@ class EnergyDashboard extends IPSModule
         } else {
             $this->MaintainVariable(self::IDENT_PERIOD_MODE, 'Intervall', VARIABLETYPE_INTEGER, '', 10, false);
             $this->MaintainVariable(self::IDENT_REFERENCE_DATE, 'Referenzdatum', VARIABLETYPE_INTEGER, '~UnixTimestampDate', 11, false);
-            $this->MaintainVariable(self::IDENT_ACTION, 'Navigation', VARIABLETYPE_INTEGER, '', 12, false);
+            $this->MaintainVariable(self::IDENT_ACTION_PREV, 'Zurück', VARIABLETYPE_BOOLEAN, '~Switch', 12, false);
+            $this->MaintainVariable(self::IDENT_ACTION_TODAY, 'Heute', VARIABLETYPE_BOOLEAN, '~Switch', 13, false);
+            $this->MaintainVariable(self::IDENT_ACTION_NEXT, 'Vor', VARIABLETYPE_BOOLEAN, '~Switch', 14, false);
         }
 
         if ($this->ReadAttributeInteger('ReferenceTimestamp') <= 0) {
@@ -108,8 +112,14 @@ class EnergyDashboard extends IPSModule
         $this->MaintainVariable(self::IDENT_REFERENCE_DATE, 'Referenzdatum', VARIABLETYPE_INTEGER, '~UnixTimestampDate', 11, true);
         $this->EnableAction(self::IDENT_REFERENCE_DATE);
 
-        $this->MaintainVariable(self::IDENT_ACTION, 'Navigation', VARIABLETYPE_INTEGER, 'EDB.NavAction', 12, true);
-        $this->EnableAction(self::IDENT_ACTION);
+        $this->MaintainVariable(self::IDENT_ACTION_PREV, 'Zurück', VARIABLETYPE_INTEGER, 'EDB.TriggerPrev', 12, true);
+        $this->EnableAction(self::IDENT_ACTION_PREV);
+
+        $this->MaintainVariable(self::IDENT_ACTION_TODAY, 'Heute', VARIABLETYPE_INTEGER, 'EDB.TriggerToday', 13, true);
+        $this->EnableAction(self::IDENT_ACTION_TODAY);
+
+        $this->MaintainVariable(self::IDENT_ACTION_NEXT, 'Vor', VARIABLETYPE_INTEGER, 'EDB.TriggerNext', 14, true);
+        $this->EnableAction(self::IDENT_ACTION_NEXT);
 
         $this->SyncControlsFromAttributes();
     }
@@ -138,19 +148,25 @@ class EnergyDashboard extends IPSModule
                 $this->UpdateVisualization();
                 break;
 
-            case self::IDENT_ACTION:
-                switch ((int) $Value) {
-                    case 1:
-                        $this->ShiftPeriod(-1);
-                        break;
-                    case 2:
-                        $this->GoToToday();
-                        break;
-                    case 3:
-                        $this->ShiftPeriod(1);
-                        break;
+            case self::IDENT_ACTION_PREV:
+                if ((int) $Value === 1) {
+                    $this->ShiftPeriod(-1);
                 }
-                SetValue($this->GetIDForIdent(self::IDENT_ACTION), 0);
+                @SetValue($this->GetIDForIdent(self::IDENT_ACTION_PREV), 0);
+                break;
+
+            case self::IDENT_ACTION_TODAY:
+                if ((int) $Value === 1) {
+                    $this->GoToToday();
+                }
+                @SetValue($this->GetIDForIdent(self::IDENT_ACTION_TODAY), 0);
+                break;
+
+            case self::IDENT_ACTION_NEXT:
+                if ((int) $Value === 1) {
+                    $this->ShiftPeriod(1);
+                }
+                @SetValue($this->GetIDForIdent(self::IDENT_ACTION_NEXT), 0);
                 break;
 
             default:
@@ -194,17 +210,21 @@ class EnergyDashboard extends IPSModule
 
     private function SyncControlsFromAttributes(): void
     {
-        if (!@IPS_VariableExists($this->GetIDForIdent(self::IDENT_PERIOD_MODE))) {
-            return;
-        }
-
         $modeMap = ['day' => 0, 'week' => 1, 'month' => 2, 'year' => 3];
         $mode = $this->ReadAttributeString('PeriodMode');
         $ref = $this->GetReferenceTimestamp();
 
-        @SetValue($this->GetIDForIdent(self::IDENT_PERIOD_MODE), $modeMap[$mode] ?? 0);
-        @SetValue($this->GetIDForIdent(self::IDENT_REFERENCE_DATE), strtotime(date('Y-m-d 00:00:00', $ref)));
-        @SetValue($this->GetIDForIdent(self::IDENT_ACTION), 0);
+        if (@IPS_VariableExists($this->GetIDForIdent(self::IDENT_PERIOD_MODE))) {
+            @SetValue($this->GetIDForIdent(self::IDENT_PERIOD_MODE), $modeMap[$mode] ?? 0);
+        }
+        if (@IPS_VariableExists($this->GetIDForIdent(self::IDENT_REFERENCE_DATE))) {
+            @SetValue($this->GetIDForIdent(self::IDENT_REFERENCE_DATE), strtotime(date('Y-m-d 00:00:00', $ref)));
+        }
+        foreach ([self::IDENT_ACTION_PREV, self::IDENT_ACTION_TODAY, self::IDENT_ACTION_NEXT] as $ident) {
+            if (@IPS_VariableExists($this->GetIDForIdent($ident))) {
+                @SetValue($this->GetIDForIdent($ident), 0);
+            }
+        }
     }
 
     private function RegisterProfiles(): void
@@ -216,12 +236,20 @@ class EnergyDashboard extends IPSModule
             IPS_SetVariableProfileAssociation('EDB.PeriodMode', 2, 'Monat', '', -1);
             IPS_SetVariableProfileAssociation('EDB.PeriodMode', 3, 'Jahr', '', -1);
         }
-        if (!IPS_VariableProfileExists('EDB.NavAction')) {
-            IPS_CreateVariableProfile('EDB.NavAction', VARIABLETYPE_INTEGER);
-            IPS_SetVariableProfileAssociation('EDB.NavAction', 0, '-', '', -1);
-            IPS_SetVariableProfileAssociation('EDB.NavAction', 1, '◀', '', -1);
-            IPS_SetVariableProfileAssociation('EDB.NavAction', 2, 'Heute', '', -1);
-            IPS_SetVariableProfileAssociation('EDB.NavAction', 3, '▶', '', -1);
+        if (!IPS_VariableProfileExists('EDB.TriggerPrev')) {
+            IPS_CreateVariableProfile('EDB.TriggerPrev', VARIABLETYPE_INTEGER);
+            IPS_SetVariableProfileAssociation('EDB.TriggerPrev', 0, '-', '', -1);
+            IPS_SetVariableProfileAssociation('EDB.TriggerPrev', 1, '◀', '', -1);
+        }
+        if (!IPS_VariableProfileExists('EDB.TriggerToday')) {
+            IPS_CreateVariableProfile('EDB.TriggerToday', VARIABLETYPE_INTEGER);
+            IPS_SetVariableProfileAssociation('EDB.TriggerToday', 0, '-', '', -1);
+            IPS_SetVariableProfileAssociation('EDB.TriggerToday', 1, 'Heute', '', -1);
+        }
+        if (!IPS_VariableProfileExists('EDB.TriggerNext')) {
+            IPS_CreateVariableProfile('EDB.TriggerNext', VARIABLETYPE_INTEGER);
+            IPS_SetVariableProfileAssociation('EDB.TriggerNext', 0, '-', '', -1);
+            IPS_SetVariableProfileAssociation('EDB.TriggerNext', 1, '▶', '', -1);
         }
     }
 
@@ -302,8 +330,9 @@ class EnergyDashboard extends IPSModule
     private function ResolveTotalsForRange(int $archiveID, int $rangeStart, int $rangeEnd, array $sourceChart): array
     {
         $totals = $this->CalculateTotalsFromSourceData($sourceChart);
+        $mode = $this->ReadAttributeString('PeriodMode');
 
-        if ($this->ReadAttributeString('PeriodMode') === 'day') {
+        if ($mode === 'day') {
             if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
                 $dayValues = $this->ReadHistoricalDayEnergy($archiveID, $rangeStart);
                 if ($dayValues !== null) {
@@ -315,6 +344,21 @@ class EnergyDashboard extends IPSModule
                 if ($counterValues !== null) {
                     return $this->FinalizeTotals($counterValues);
                 }
+            }
+            return $this->FinalizeTotals($totals);
+        }
+
+        if ($this->ReadPropertyBoolean('UseHistoricalCounterDiff')) {
+            $counterValues = $this->ReadHistoricalCounterDiff($archiveID, $rangeStart, $rangeEnd);
+            if ($counterValues !== null) {
+                return $this->FinalizeTotals($counterValues);
+            }
+        }
+
+        if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
+            $summed = $this->ReadHistoricalDayEnergyRange($archiveID, $rangeStart, $rangeEnd);
+            if ($summed !== null) {
+                return $this->FinalizeTotals($summed);
             }
         }
 
@@ -346,6 +390,39 @@ class EnergyDashboard extends IPSModule
             }
         }
         return $foundAny ? $values : null;
+    }
+
+
+    private function ReadHistoricalDayEnergyRange(int $archiveID, int $rangeStart, int $rangeEnd): ?array
+    {
+        $sum = [
+            'pv' => 0.0,
+            'gridImport' => 0.0,
+            'gridExport' => 0.0,
+            'load' => 0.0,
+            'batteryCharge' => 0.0,
+            'batteryDischarge' => 0.0
+        ];
+        $foundAny = false;
+
+        for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
+            $vals = $this->ReadHistoricalDayEnergy($archiveID, $day);
+            if ($vals !== null) {
+                foreach ($sum as $k => $v) {
+                    $sum[$k] += (float) ($vals[$k] ?? 0.0);
+                }
+                $foundAny = true;
+            }
+        }
+
+        if (!$foundAny) {
+            return null;
+        }
+
+        foreach ($sum as $k => $v) {
+            $sum[$k] = round($v, 2);
+        }
+        return $sum;
     }
 
     private function ReadHistoricalCounterDiff(int $archiveID, int $dayStart, int $dayEnd): ?array
