@@ -6,29 +6,159 @@
       "caption": "Titel"
     },
     {
-      "type": "NumberSpinner",
+      "type": "SelectVariable",
       "name": "PvPowerID",
-      "caption": "Variable-ID PV-Leistung (W)"
+      "caption": "PV-Leistung (W)",
+      "validVariableTypes": [
+        1,
+        2
+      ],
+      "width": "400px"
     },
     {
-      "type": "NumberSpinner",
+      "type": "SelectVariable",
       "name": "GridPowerID",
-      "caption": "Variable-ID Netzleistung (W, Bezug + / Einspeisung -)"
+      "caption": "Netzleistung (W, Bezug + / Einspeisung -)",
+      "validVariableTypes": [
+        1,
+        2
+      ],
+      "width": "400px"
     },
     {
-      "type": "NumberSpinner",
+      "type": "SelectVariable",
       "name": "LoadPowerID",
-      "caption": "Variable-ID Hausverbrauch (W)"
+      "caption": "Hausverbrauch (W)",
+      "validVariableTypes": [
+        1,
+        2
+      ],
+      "width": "400px"
     },
     {
-      "type": "NumberSpinner",
+      "type": "SelectVariable",
       "name": "BatteryPowerID",
-      "caption": "Variable-ID Batterie-Leistung (W, Laden - / Entladen +, optional 0)"
+      "caption": "Batterie-Leistung (W, Laden - / Entladen +, optional)",
+      "validVariableTypes": [
+        1,
+        2
+      ],
+      "width": "400px"
+    },
+    {
+      "type": "PopupButton",
+      "caption": "Optionale kWh-Zähler",
+      "popup": {
+        "items": [
+          {
+            "type": "Label",
+            "caption": "Wenn gesetzt, überschreiben diese Tageszähler die aus Leistung berechneten Übersichtswerte."
+          },
+          {
+            "type": "SelectVariable",
+            "name": "PvEnergyTodayID",
+            "caption": "PV heute (kWh)",
+            "validVariableTypes": [
+              1,
+              2
+            ],
+            "width": "400px"
+          },
+          {
+            "type": "SelectVariable",
+            "name": "GridImportTodayID",
+            "caption": "Netzbezug heute (kWh)",
+            "validVariableTypes": [
+              1,
+              2
+            ],
+            "width": "400px"
+          },
+          {
+            "type": "SelectVariable",
+            "name": "GridExportTodayID",
+            "caption": "Einspeisung heute (kWh)",
+            "validVariableTypes": [
+              1,
+              2
+            ],
+            "width": "400px"
+          },
+          {
+            "type": "SelectVariable",
+            "name": "LoadEnergyTodayID",
+            "caption": "Verbrauch heute (kWh)",
+            "validVariableTypes": [
+              1,
+              2
+            ],
+            "width": "400px"
+          },
+          {
+            "type": "SelectVariable",
+            "name": "BatteryChargeTodayID",
+            "caption": "Batterie Laden heute (kWh)",
+            "validVariableTypes": [
+              1,
+              2
+            ],
+            "width": "400px"
+          },
+          {
+            "type": "SelectVariable",
+            "name": "BatteryDischargeTodayID",
+            "caption": "Batterie Entladen heute (kWh)",
+            "validVariableTypes": [
+              1,
+              2
+            ],
+            "width": "400px"
+          }
+        ]
+      }
     },
     {
       "type": "NumberSpinner",
       "name": "ArchiveControlID",
       "caption": "Archivsteuerung-ID (0 = automatisch suchen)"
+    },
+    {
+      "type": "Select",
+      "name": "SourceAggregation",
+      "caption": "Aggregation Stromquellen",
+      "options": [
+        {
+          "caption": "5 Minuten",
+          "value": 5
+        },
+        {
+          "caption": "1 Minute",
+          "value": 6
+        },
+        {
+          "caption": "Stündlich",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "type": "Select",
+      "name": "UsageAggregation",
+      "caption": "Aggregation Stromnutzung",
+      "options": [
+        {
+          "caption": "Stündlich",
+          "value": 0
+        },
+        {
+          "caption": "5 Minuten",
+          "value": 5
+        },
+        {
+          "caption": "1 Minute",
+          "value": 6
+        }
+      ]
     },
     {
       "type": "NumberSpinner",
@@ -38,7 +168,7 @@
     {
       "type": "NumberSpinner",
       "name": "BucketMinutes",
-      "caption": "Balkenraster in Minuten"
+      "caption": "Fallback-Balkenraster in Minuten"
     },
     {
       "type": "NumberSpinner",
@@ -59,7 +189,7 @@
     },
     {
       "type": "Label",
-      "caption": "Diese Version rendert alles direkt aus String-Variablen. Keine assets-Dateien erforderlich."
+      "caption": "Optimiert auf AC_GetAggregatedValues und SelectVariable."
     }
   ],
   "status": [
