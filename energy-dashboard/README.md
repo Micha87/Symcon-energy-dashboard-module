@@ -1,3 +1,4 @@
+[README.md](https://github.com/user-attachments/files/26358622/README.md)
 # SymconEnergyDashboard
 
 IP-Symcon Modul für ein Energie-Dashboard ähnlich dem Home-Assistant-Energy-View.
@@ -54,3 +55,8 @@ IP-Symcon Modul für ein Energie-Dashboard ähnlich dem Home-Assistant-Energy-Vi
   - echte Home-Assistant-ähnliche Kartenoptik
   - Sankey zusätzlich
   - Autarkie- und Eigenverbrauchsquote
+
+
+## Wichtige Änderung
+
+- Das Modul begrenzt die Datenmenge für den Chart **Stromquellen** über die Eigenschaft **MaxSourcePoints** (Standard: 240), damit die HTMLBox unter dem Symcon-Limit von 1024 kB bleibt.
