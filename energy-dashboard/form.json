@@ -6,6 +6,11 @@
       "caption": "Titel"
     },
     {
+      "type": "CheckBox",
+      "name": "CreateWebFrontControls",
+      "caption": "Bedienvariablen für WebFront anlegen"
+    },
+    {
       "type": "SelectVariable",
       "name": "PvPowerID",
       "caption": "PV-Leistung (W)",
@@ -73,10 +78,6 @@
           "type": "CheckBox",
           "name": "UseHistoricalDayEnergy",
           "caption": "Historische Tages-kWh für Übersicht verwenden"
-        },
-        {
-          "type": "Label",
-          "caption": "Wenn für den gewählten Tag geloggte Tageswerte vorhanden sind, werden diese bevorzugt verwendet."
         },
         {
           "type": "SelectVariable",
@@ -148,10 +149,6 @@
           "type": "CheckBox",
           "name": "UseHistoricalCounterDiff",
           "caption": "Bei fehlenden Tages-kWh Zählerdifferenz verwenden"
-        },
-        {
-          "type": "Label",
-          "caption": "Tageswert = Zählerstand Tagesende minus Zählerstand Tagesanfang."
         },
         {
           "type": "SelectVariable",
@@ -282,22 +279,12 @@
     },
     {
       "type": "Button",
-      "caption": "Heute anzeigen",
-      "onClick": "EDB_GoToToday($id);"
-    },
-    {
-      "type": "Button",
-      "caption": "Vortag",
-      "onClick": "EDB_PreviousDay($id);"
-    },
-    {
-      "type": "Button",
-      "caption": "Nächster Tag",
-      "onClick": "EDB_NextDay($id);"
+      "caption": "Bedienvariablen jetzt anlegen",
+      "onClick": "EDB_EnsureWebFrontControls($id);"
     },
     {
       "type": "Label",
-      "caption": "IDs werden komplett über das Formular gewählt. Historische Tages-kWh werden bevorzugt, danach optional Zählerdifferenz, danach Leistungsintegration."
+      "caption": "WebFront-Bedienung erfolgt über Statusvariablen: Zeitraum, Datum, Vor/Zurück, Heute."
     }
   ],
   "status": [
