@@ -329,10 +329,10 @@ class EnergyDashboard extends IPSModule
 
     private function ResolveTotalsForRange(int $archiveID, int $rangeStart, int $rangeEnd, array $sourceChart): array
     {
-        $totals = $this->CalculateTotalsFromSourceData($sourceChart);
         $mode = $this->ReadAttributeString('PeriodMode');
 
         if ($mode === 'day') {
+            $totals = $this->CalculateTotalsFromSourceData($sourceChart);
             if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
                 $dayValues = $this->ReadHistoricalDayEnergy($archiveID, $rangeStart);
                 if ($dayValues !== null) {
@@ -348,21 +348,26 @@ class EnergyDashboard extends IPSModule
             return $this->FinalizeTotals($totals);
         }
 
-        if ($this->ReadPropertyBoolean('UseHistoricalCounterDiff')) {
-            $counterValues = $this->ReadHistoricalCounterDiff($archiveID, $rangeStart, $rangeEnd);
-            if ($counterValues !== null) {
-                return $this->FinalizeTotals($counterValues);
+        $sum = [
+            'pv' => 0.0,
+            'gridImport' => 0.0,
+            'gridExport' => 0.0,
+            'load' => 0.0,
+            'batteryCharge' => 0.0,
+            'batteryDischarge' => 0.0
+        ];
+
+        for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
+            $vals = $this->ResolveSingleDayTotals($archiveID, $day);
+            foreach ($sum as $k => $v) {
+                $sum[$k] += (float) ($vals[$k] ?? 0.0);
             }
         }
 
-        if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
-            $summed = $this->ReadHistoricalDayEnergyRange($archiveID, $rangeStart, $rangeEnd);
-            if ($summed !== null) {
-                return $this->FinalizeTotals($summed);
-            }
+        foreach ($sum as $k => $v) {
+            $sum[$k] = round($v, 2);
         }
-
-        return $this->FinalizeTotals($totals);
+        return $this->FinalizeTotals($sum);
     }
 
     
@@ -392,6 +397,129 @@ class EnergyDashboard extends IPSModule
         return $foundAny ? $values : null;
     }
 
+
+
+    private function ResolveSingleDayTotals(int $archiveID, int $dayStart): array
+    {
+        $dayEnd = strtotime('+1 day', $dayStart);
+
+        if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
+            $dayValues = $this->ReadHistoricalDayEnergy($archiveID, $dayStart);
+            if ($dayValues !== null) {
+                return array_merge([
+                    'pv' => 0.0,
+                    'gridImport' => 0.0,
+                    'gridExport' => 0.0,
+                    'load' => 0.0,
+                    'batteryCharge' => 0.0,
+                    'batteryDischarge' => 0.0
+                ], $dayValues);
+            }
+        }
+
+        if ($this->ReadPropertyBoolean('UseHistoricalCounterDiff')) {
+            $counterValues = $this->ReadHistoricalCounterDiff($archiveID, $dayStart, $dayEnd);
+            if ($counterValues !== null) {
+                return array_merge([
+                    'pv' => 0.0,
+                    'gridImport' => 0.0,
+                    'gridExport' => 0.0,
+                    'load' => 0.0,
+                    'batteryCharge' => 0.0,
+                    'batteryDischarge' => 0.0
+                ], $counterValues);
+            }
+        }
+
+        $source = $this->BuildDayPowerSourceChartData($archiveID, $dayStart, $dayEnd);
+        return $this->CalculateTotalsFromSourceData($source);
+    }
+
+    private function BuildDayPowerSourceChartData(int $archiveID, int $start, int $end): array
+    {
+        $aggregation = $this->ReadPropertyInteger('SourceAggregation');
+        return $this->AlignSeriesByTimestamp([
+            'pv' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertPv')),
+            'grid' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertGrid')),
+            'load' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertLoad')),
+            'battery' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertBattery'))
+        ]);
+    }
+
+    private function BuildPeriodEnergyRows(int $archiveID, int $rangeStart, int $rangeEnd, string $mode): array
+    {
+        $daily = [];
+        for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
+            $vals = $this->ResolveSingleDayTotals($archiveID, $day);
+            $daily[] = [
+                'ts' => $day,
+                'label' => date('d.m', $day),
+                'pv' => (float) $vals['pv'],
+                'grid' => (float) $vals['gridImport'] - (float) $vals['gridExport'],
+                'load' => (float) $vals['load'],
+                'battery' => (float) $vals['batteryCharge'] + (float) $vals['batteryDischarge']
+            ];
+        }
+
+        if ($mode === 'year') {
+            $months = [];
+            foreach ($daily as $row) {
+                $key = date('Y-m', $row['ts']);
+                if (!isset($months[$key])) {
+                    $months[$key] = ['label' => date('M', $row['ts']), 'pv' => 0.0, 'grid' => 0.0, 'load' => 0.0, 'battery' => 0.0];
+                }
+                $months[$key]['pv'] += $row['pv'];
+                $months[$key]['grid'] += $row['grid'];
+                $months[$key]['load'] += $row['load'];
+                $months[$key]['battery'] += $row['battery'];
+            }
+            return array_values(array_map(function($r) {
+                foreach (['pv','grid','load','battery'] as $k) { $r[$k] = round($r[$k], 2); }
+                return $r;
+            }, $months));
+        }
+
+        return $daily;
+    }
+
+    private function BuildPeriodUsageRows(int $archiveID, int $rangeStart, int $rangeEnd, string $mode): array
+    {
+        $rows = [];
+        for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
+            $vals = $this->ResolveSingleDayTotals($archiveID, $day);
+            $rows[] = [
+                'ts' => $day,
+                'label' => date('d.m', $day),
+                'pvToLoad' => round(min((float) $vals['pv'], (float) $vals['load']), 3),
+                'gridImport' => round((float) $vals['gridImport'], 3),
+                'batteryCharge' => round((float) $vals['batteryCharge'], 3),
+                'batteryDischarge' => round((float) $vals['batteryDischarge'], 3),
+                'gridExport' => round((float) $vals['gridExport'], 3)
+            ];
+        }
+
+        if ($mode === 'year') {
+            $months = [];
+            foreach ($rows as $row) {
+                $key = date('Y-m', $row['ts']);
+                if (!isset($months[$key])) {
+                    $months[$key] = ['label' => date('M', $row['ts']), 'pvToLoad' => 0.0, 'gridImport' => 0.0, 'batteryCharge' => 0.0, 'batteryDischarge' => 0.0, 'gridExport' => 0.0];
+                }
+                foreach (['pvToLoad','gridImport','batteryCharge','batteryDischarge','gridExport'] as $k) {
+                    $months[$key][$k] += $row[$k];
+                }
+            }
+            $rows = array_values($months);
+            foreach ($rows as &$r) {
+                foreach (['pvToLoad','gridImport','batteryCharge','batteryDischarge','gridExport'] as $k) {
+                    $r[$k] = round($r[$k], 3);
+                }
+            }
+            unset($r);
+        }
+
+        return $rows;
+    }
 
     private function ReadHistoricalDayEnergyRange(int $archiveID, int $rangeStart, int $rangeEnd): ?array
     {
@@ -537,47 +665,71 @@ class EnergyDashboard extends IPSModule
 
     private function BuildSourceChartData(int $archiveID, int $start, int $end): array
     {
-        $aggregation = $this->ReadPropertyInteger('SourceAggregation');
-        $aligned = $this->AlignSeriesByTimestamp([
-            'pv' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertPv')),
-            'grid' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertGrid')),
-            'load' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertLoad')),
-            'battery' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertBattery'))
-        ]);
-        return $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
+        $mode = $this->ReadAttributeString('PeriodMode');
+
+        if ($mode === 'day') {
+            $aggregation = $this->ReadPropertyInteger('SourceAggregation');
+            $aligned = $this->AlignSeriesByTimestamp([
+                'pv' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertPv')),
+                'grid' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertGrid')),
+                'load' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertLoad')),
+                'battery' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertBattery'))
+            ]);
+            $aligned = $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
+            $aligned['unit'] = 'kW';
+            return $aligned;
+        }
+
+        $rows = $this->BuildPeriodEnergyRows($archiveID, $start, $end, $mode);
+        $series = ['labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => [], 'unit' => 'kWh'];
+        foreach ($rows as $row) {
+            $series['labels'][] = $row['label'];
+            $series['pv'][] = round((float) $row['pv'], 2);
+            $series['grid'][] = round((float) $row['grid'], 2);
+            $series['load'][] = round((float) $row['load'], 2);
+            $series['battery'][] = round((float) $row['battery'], 2);
+        }
+        return $series;
     }
 
     private function BuildUsageChartData(int $archiveID, int $start, int $end): array
     {
-        $aggregation = $this->ReadPropertyInteger('UsageAggregation');
-        $aligned = $this->AlignSeriesByTimestamp([
-            'pv' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertPv')),
-            'grid' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertGrid')),
-            'load' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertLoad')),
-            'battery' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertBattery'))
-        ]);
+        $mode = $this->ReadAttributeString('PeriodMode');
 
-        $buckets = [];
-        $count = count($aligned['timestamps']);
-        if ($count < 2) return [];
-        for ($i = 1; $i < $count; $i++) {
-            $from = (int) $aligned['timestamps'][$i - 1];
-            $to = (int) $aligned['timestamps'][$i];
-            $dtHours = max(1 / 60, ($to - $from) / 3600.0);
-            $pv = max(0.0, (float) $aligned['pv'][$i - 1]);
-            $grid = (float) $aligned['grid'][$i - 1];
-            $load = max(0.0, (float) $aligned['load'][$i - 1]);
-            $battery = (float) $aligned['battery'][$i - 1];
-            $buckets[] = [
-                'label' => date('H:i', $from),
-                'pvToLoad' => round(min($pv, $load) * $dtHours, 3),
-                'gridImport' => round(max(0.0, $grid) * $dtHours, 3),
-                'batteryCharge' => round(max(0.0, -$battery) * $dtHours, 3),
-                'batteryDischarge' => round(max(0.0, $battery) * $dtHours, 3),
-                'gridExport' => round(max(0.0, -$grid) * $dtHours, 3)
-            ];
+        if ($mode === 'day') {
+            $aggregation = $this->ReadPropertyInteger('UsageAggregation');
+            $aligned = $this->AlignSeriesByTimestamp([
+                'pv' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertPv')),
+                'grid' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertGrid')),
+                'load' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertLoad')),
+                'battery' => $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end, $this->ReadPropertyBoolean('InvertBattery'))
+            ]);
+
+            $buckets = [];
+            $count = count($aligned['timestamps']);
+            if ($count < 2) return [];
+            for ($i = 1; $i < $count; $i++) {
+                $from = (int) $aligned['timestamps'][$i - 1];
+                $to = (int) $aligned['timestamps'][$i];
+                $dtHours = max(1 / 60, ($to - $from) / 3600.0);
+                $pv = max(0.0, (float) $aligned['pv'][$i - 1]);
+                $grid = (float) $aligned['grid'][$i - 1];
+                $load = max(0.0, (float) $aligned['load'][$i - 1]);
+                $battery = (float) $aligned['battery'][$i - 1];
+                $buckets[] = [
+                    'label' => date('H:i', $from),
+                    'pvToLoad' => round(min($pv, $load) * $dtHours, 3),
+                    'gridImport' => round(max(0.0, $grid) * $dtHours, 3),
+                    'batteryCharge' => round(max(0.0, -$battery) * $dtHours, 3),
+                    'batteryDischarge' => round(max(0.0, $battery) * $dtHours, 3),
+                    'gridExport' => round(max(0.0, -$grid) * $dtHours, 3)
+                ];
+            }
+            return $this->ReduceUsageBuckets($buckets, max(8, $this->ReadPropertyInteger('MaxUsagePoints')));
         }
-        return $this->ReduceUsageBuckets($buckets, max(8, $this->ReadPropertyInteger('MaxUsagePoints')));
+
+        $rows = $this->BuildPeriodUsageRows($archiveID, $start, $end, $mode);
+        return $this->ReduceUsageBuckets($rows, max(8, $this->ReadPropertyInteger('MaxUsagePoints')));
     }
 
     private function AlignSeriesByTimestamp(array $series): array
@@ -682,10 +834,12 @@ class EnergyDashboard extends IPSModule
 
     private function GetSourcesHtml(array $data, string $label): string
     {
+        $unit = $data['unit'] ?? 'kW';
         $json = json_encode(['labels' => $data['labels'], 'pv' => $data['pv'], 'grid' => $data['grid'], 'load' => $data['load'], 'battery' => $data['battery']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
         $labelEsc = htmlspecialchars($label);
-        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;"><style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style><div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script>(function(){const d=' . $json . ';new Chart(document.getElementById("edbSourceChart"),{type:"line",data:{labels:d.labels,datasets:[{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:true,tension:.25,pointRadius:0},{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.06)",tension:.2,pointRadius:0},{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.85)",backgroundColor:"rgba(0,0,0,0)",borderDash:[6,4],tension:.2,pointRadius:0},{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.06)",tension:.2,pointRadius:0,hidden:d.battery.every(v=>v===0)}]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"kW"}},x:{ticks:{maxTicksLimit:8}}}}});})();</script></div>';
+        $unitEsc = htmlspecialchars($unit);
+        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;"><style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style><div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div><script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script>(function(){const d=' . $json . ';new Chart(document.getElementById("edbSourceChart"),{type:"line",data:{labels:d.labels,datasets:[{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:false,tension:.25,pointRadius:0},{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.06)",fill:false,tension:.2,pointRadius:0},{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.85)",backgroundColor:"rgba(0,0,0,0)",borderDash:[6,4],tension:.2,pointRadius:0},{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.06)",tension:.2,pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:12}}}}});})();</script></div>';
     }
 
     private function GetUsageHtml(array $data, array $totals, string $label): string
