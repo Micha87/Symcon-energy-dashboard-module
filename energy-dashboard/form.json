@@ -213,6 +213,118 @@
       ]
     },
     {
+      "type": "ExpansionPanel",
+      "caption": "Darstellung je Zeitraum",
+      "items": [
+        {
+          "type": "Select",
+          "name": "ViewModeWeekSources",
+          "caption": "Woche: Stromquellen",
+          "options": [
+            {
+              "caption": "Stunden",
+              "value": "hours"
+            },
+            {
+              "caption": "Tage",
+              "value": "days"
+            }
+          ]
+        },
+        {
+          "type": "Select",
+          "name": "ViewModeWeekUsage",
+          "caption": "Woche: Stromnutzung",
+          "options": [
+            {
+              "caption": "Stunden",
+              "value": "hours"
+            },
+            {
+              "caption": "Tage",
+              "value": "days"
+            }
+          ]
+        },
+        {
+          "type": "Select",
+          "name": "ViewModeMonthSources",
+          "caption": "Monat: Stromquellen",
+          "options": [
+            {
+              "caption": "Stunden",
+              "value": "hours"
+            },
+            {
+              "caption": "Tage",
+              "value": "days"
+            },
+            {
+              "caption": "Wochen",
+              "value": "weeks"
+            }
+          ]
+        },
+        {
+          "type": "Select",
+          "name": "ViewModeMonthUsage",
+          "caption": "Monat: Stromnutzung",
+          "options": [
+            {
+              "caption": "Stunden",
+              "value": "hours"
+            },
+            {
+              "caption": "Tage",
+              "value": "days"
+            },
+            {
+              "caption": "Wochen",
+              "value": "weeks"
+            }
+          ]
+        },
+        {
+          "type": "Select",
+          "name": "ViewModeYearSources",
+          "caption": "Jahr: Stromquellen",
+          "options": [
+            {
+              "caption": "Stunden",
+              "value": "hours"
+            },
+            {
+              "caption": "Wochen",
+              "value": "weeks"
+            },
+            {
+              "caption": "Monate",
+              "value": "months"
+            }
+          ]
+        },
+        {
+          "type": "Select",
+          "name": "ViewModeYearUsage",
+          "caption": "Jahr: Stromnutzung",
+          "options": [
+            {
+              "caption": "Stunden",
+              "value": "hours"
+            },
+            {
+              "caption": "Wochen",
+              "value": "weeks"
+            },
+            {
+              "caption": "Monate",
+              "value": "months"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "NumberSpinner",
       "name": "ArchiveControlID",
       "caption": "Archivsteuerung-ID (0 = automatisch suchen)"
