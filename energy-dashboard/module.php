@@ -970,7 +970,7 @@ class EnergyDashboard extends IPSModule
             . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0},'
             . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.85)",backgroundColor:"rgba(0,0,0,.08)",borderDash:[6,4],tension:.2,pointRadius:0},'
             . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.2,pointRadius:0}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' + $unitEsc + '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 20 ? 20 : 12), autoSkip:true, maxRotation:0, minRotation:0}}}}});})();</script>'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 20 ? 20 : 12),autoSkip:true,maxRotation:0,minRotation:0}}}}});})();</script>'
             . '</div>';
     }
 
