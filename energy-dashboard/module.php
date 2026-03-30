@@ -321,28 +321,9 @@ class EnergyDashboard extends IPSModule
         return $this->FinalizeTotals($totals);
     }
 
-    private function ReadHistoricalDayEnergy(int $archiveID, int $dayStart): ?array
-    {
-        $map = [
-            'pv'               => 'PvEnergyDayID',
-            'gridImport'       => 'GridImportEnergyDayID',
-            'gridExport'       => 'GridExportEnergyDayID',
-            'load'             => 'LoadEnergyDayID',
-            'batteryCharge'    => 'BatteryChargeEnergyDayID',
-            'batteryDischarge' => 'BatteryDischargeEnergyDayID'
-        ];
-        $values = [];
-        $foundAny = false;
-        foreach ($map as $key => $property) {
-            $id = $this->ReadPropertyInteger($property);
-            if ($this->IsValidVar($id)) {
-                $val = $this->ReadDayValueFromDailyHistory($archiveID, $id, $dayStart);
-                            }
-        }
-        return $this->ReadHistoricalDayEnergyImpl($archiveID, $dayStart);
-    }
+    
 
-    private function ReadHistoricalDayEnergyImpl(int $archiveID, int $dayStart): ?array
+    private function ReadHistoricalDayEnergy(int $archiveID, int $dayStart): ?array
     {
         $map = [
             'pv'               => 'PvEnergyDayID',
