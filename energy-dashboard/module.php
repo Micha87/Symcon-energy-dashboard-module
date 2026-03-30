@@ -14,10 +14,18 @@ class EnergyDashboard extends IPSModule
         parent::Create();
 
         $this->RegisterPropertyString('Title', 'Energie Dashboard');
+
         $this->RegisterPropertyInteger('PvPowerID', 0);
+        $this->RegisterPropertyBoolean('InvertPv', false);
+
         $this->RegisterPropertyInteger('GridPowerID', 0);
+        $this->RegisterPropertyBoolean('InvertGrid', false);
+
         $this->RegisterPropertyInteger('LoadPowerID', 0);
+        $this->RegisterPropertyBoolean('InvertLoad', false);
+
         $this->RegisterPropertyInteger('BatteryPowerID', 0);
+        $this->RegisterPropertyBoolean('InvertBattery', false);
 
         $this->RegisterPropertyInteger('PvEnergyTodayID', 0);
         $this->RegisterPropertyInteger('GridImportTodayID', 0);
@@ -27,10 +35,9 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('BatteryDischargeTodayID', 0);
 
         $this->RegisterPropertyInteger('ArchiveControlID', 0);
-        $this->RegisterPropertyInteger('SourceAggregation', 5); // 5 Minuten
-        $this->RegisterPropertyInteger('UsageAggregation', 0);  // stündlich
+        $this->RegisterPropertyInteger('SourceAggregation', 5);
+        $this->RegisterPropertyInteger('UsageAggregation', 0);
         $this->RegisterPropertyInteger('RefreshSeconds', 300);
-        $this->RegisterPropertyInteger('BucketMinutes', 60);
         $this->RegisterPropertyInteger('MaxSourcePoints', 180);
         $this->RegisterPropertyInteger('MaxUsagePoints', 24);
 
@@ -52,9 +59,9 @@ class EnergyDashboard extends IPSModule
             $this->SetStatus(102);
         } catch (\Throwable $e) {
             $error = $this->RenderErrorHtml($e->getMessage());
-            @$this->SetValue(self::IDENT_OVERVIEW, $error);
-            @$this->SetValue(self::IDENT_SOURCES, $error);
-            @$this->SetValue(self::IDENT_USAGE, $error);
+            @SetValue($this->GetIDForIdent(self::IDENT_OVERVIEW), $error);
+            @SetValue($this->GetIDForIdent(self::IDENT_SOURCES), $error);
+            @SetValue($this->GetIDForIdent(self::IDENT_USAGE), $error);
             $this->SendDebug(__FUNCTION__, $e->getMessage(), 0);
             $this->SetStatus(201);
         }
@@ -65,7 +72,6 @@ class EnergyDashboard extends IPSModule
         $pvID      = $this->ReadPropertyInteger('PvPowerID');
         $gridID    = $this->ReadPropertyInteger('GridPowerID');
         $loadID    = $this->ReadPropertyInteger('LoadPowerID');
-        $batteryID = $this->ReadPropertyInteger('BatteryPowerID');
 
         if (!$this->IsValidVar($pvID) || !$this->IsValidVar($gridID) || !$this->IsValidVar($loadID)) {
             throw new Exception('Bitte mindestens PV-, Netz- und Verbrauchs-Variable konfigurieren.');
@@ -84,29 +90,101 @@ class EnergyDashboard extends IPSModule
         $totals      = $this->CalculateTotalsFromSourceData($sourceChart);
         $totals      = $this->OverrideTotalsWithTodayCounters($totals);
 
-        $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals));
-        $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart));
-        $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart));
+        SetValue($this->GetIDForIdent(self::IDENT_OVERVIEW), $this->GetOverviewHtml($totals));
+        SetValue($this->GetIDForIdent(self::IDENT_SOURCES), $this->GetSourcesHtml($sourceChart));
+        SetValue($this->GetIDForIdent(self::IDENT_USAGE), $this->GetUsageHtml($usageChart));
+    }
+
+    private function IsValidVar(int $id): bool
+    {
+        return $id > 0 && @IPS_VariableExists($id);
+    }
+
+    private function ApplySign(float $value, bool $invert): float
+    {
+        return $invert ? -$value : $value;
+    }
+
+    private function GetArchiveId(): int
+    {
+        $configured = $this->ReadPropertyInteger('ArchiveControlID');
+        if ($configured > 0 && @IPS_InstanceExists($configured)) {
+            return $configured;
+        }
+
+        $list = IPS_GetInstanceListByModuleID('{43192F0B-135B-4CE7-A0A7-1475603F3060}');
+        return count($list) > 0 ? $list[0] : 0;
+    }
+
+    private function GetAggregatedSeriesKw(int $archiveID, int $varID, int $aggregation, int $start, int $end, bool $invert): array
+    {
+        if (!$this->IsValidVar($varID)) {
+            return [];
+        }
+
+        $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $start, $end, 0);
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($rows as $row) {
+            $ts = (int) $row['TimeStamp'];
+            if (isset($row['Avg'])) {
+                $value = (float) $row['Avg'];
+            } elseif (isset($row['Value'])) {
+                $value = (float) $row['Value'];
+            } else {
+                continue;
+            }
+
+            $value = $this->ApplySign($value, $invert);
+            $result[$ts] = round($value / 1000.0, 3);
+        }
+
+        ksort($result);
+        return $result;
     }
 
     private function BuildSourceChartData(int $archiveID, int $start, int $end): array
     {
         $aggregation = $this->ReadPropertyInteger('SourceAggregation');
 
-        $result = [
-            'labels'  => [],
-            'pv'      => [],
-            'grid'    => [],
-            'load'    => [],
-            'battery' => []
-        ];
+        $pvRows = $this->GetAggregatedSeriesKw(
+            $archiveID,
+            $this->ReadPropertyInteger('PvPowerID'),
+            $aggregation,
+            $start,
+            $end,
+            $this->ReadPropertyBoolean('InvertPv')
+        );
 
-        $pvRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end);
-        $gridRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end);
-        $loadRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end);
-        $batteryRows = $this->IsValidVar($this->ReadPropertyInteger('BatteryPowerID'))
-            ? $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end)
-            : [];
+        $gridRows = $this->GetAggregatedSeriesKw(
+            $archiveID,
+            $this->ReadPropertyInteger('GridPowerID'),
+            $aggregation,
+            $start,
+            $end,
+            $this->ReadPropertyBoolean('InvertGrid')
+        );
+
+        $loadRows = $this->GetAggregatedSeriesKw(
+            $archiveID,
+            $this->ReadPropertyInteger('LoadPowerID'),
+            $aggregation,
+            $start,
+            $end,
+            $this->ReadPropertyBoolean('InvertLoad')
+        );
+
+        $batteryRows = $this->GetAggregatedSeriesKw(
+            $archiveID,
+            $this->ReadPropertyInteger('BatteryPowerID'),
+            $aggregation,
+            $start,
+            $end,
+            $this->ReadPropertyBoolean('InvertBattery')
+        );
 
         $aligned = $this->AlignSeriesByTimestamp([
             'pv'      => $pvRows,
@@ -115,20 +193,48 @@ class EnergyDashboard extends IPSModule
             'battery' => $batteryRows
         ]);
 
-        $aligned = $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
-        return $aligned;
+        return $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
     }
 
     private function BuildUsageChartData(int $archiveID, int $start, int $end): array
     {
         $aggregation = $this->ReadPropertyInteger('UsageAggregation');
 
-        $pvRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $aggregation, $start, $end);
-        $gridRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $aggregation, $start, $end);
-        $loadRows = $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $aggregation, $start, $end);
-        $batteryRows = $this->IsValidVar($this->ReadPropertyInteger('BatteryPowerID'))
-            ? $this->GetAggregatedSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $aggregation, $start, $end)
-            : [];
+        $pvRows = $this->GetAggregatedSeriesKw(
+            $archiveID,
+            $this->ReadPropertyInteger('PvPowerID'),
+            $aggregation,
+            $start,
+            $end,
+            $this->ReadPropertyBoolean('InvertPv')
+        );
+
+        $gridRows = $this->GetAggregatedSeriesKw(
+            $archiveID,
+            $this->ReadPropertyInteger('GridPowerID'),
+            $aggregation,
+            $start,
+            $end,
+            $this->ReadPropertyBoolean('InvertGrid')
+        );
+
+        $loadRows = $this->GetAggregatedSeriesKw(
+            $archiveID,
+            $this->ReadPropertyInteger('LoadPowerID'),
+            $aggregation,
+            $start,
+            $end,
+            $this->ReadPropertyBoolean('InvertLoad')
+        );
+
+        $batteryRows = $this->GetAggregatedSeriesKw(
+            $archiveID,
+            $this->ReadPropertyInteger('BatteryPowerID'),
+            $aggregation,
+            $start,
+            $end,
+            $this->ReadPropertyBoolean('InvertBattery')
+        );
 
         $aligned = $this->AlignSeriesByTimestamp([
             'pv'      => $pvRows,
@@ -163,36 +269,7 @@ class EnergyDashboard extends IPSModule
             ];
         }
 
-        $buckets = $this->ReduceUsageBuckets($buckets, max(8, $this->ReadPropertyInteger('MaxUsagePoints')));
-        return $buckets;
-    }
-
-    private function GetAggregatedSeriesKw(int $archiveID, int $varID, int $aggregation, int $start, int $end): array
-    {
-        if (!$this->IsValidVar($varID)) {
-            return [];
-        }
-
-        $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $start, $end, 0);
-        if (!is_array($rows)) {
-            return [];
-        }
-
-        $result = [];
-        foreach ($rows as $row) {
-            $ts = (int) $row['TimeStamp'];
-            if (isset($row['Avg'])) {
-                $value = (float) $row['Avg'];
-            } elseif (isset($row['Value'])) {
-                $value = (float) $row['Value'];
-            } else {
-                continue;
-            }
-            $result[$ts] = round($value / 1000.0, 3);
-        }
-
-        ksort($result);
-        return $result;
+        return $this->ReduceUsageBuckets($buckets, max(8, $this->ReadPropertyInteger('MaxUsagePoints')));
     }
 
     private function AlignSeriesByTimestamp(array $series): array
@@ -257,7 +334,6 @@ class EnergyDashboard extends IPSModule
 
         for ($i = 0; $i < $count; $i += $step) {
             $sliceEnd = min($i + $step, $count);
-
             $reduced['timestamps'][] = $aligned['timestamps'][$sliceEnd - 1];
             $reduced['labels'][]     = $aligned['labels'][$sliceEnd - 1];
             $reduced['pv'][]         = round($this->AverageSlice($aligned['pv'], $i, $sliceEnd), 3);
