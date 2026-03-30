@@ -270,7 +270,7 @@ class EnergyDashboard extends IPSModule
             case 'month':
                 $start = strtotime(date('Y-m-01 00:00:00', $reference));
                 $endBoundary = strtotime('+1 month', $start);
-                $label = strftime('%B %Y', $start) if False else date('F Y', $start);
+                $label = date('F Y', $start);
                 break;
             case 'year':
                 $start = strtotime(date('Y-01-01 00:00:00', $reference));
