@@ -61,8 +61,13 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('PvTargetDayID', 0);
         $this->RegisterPropertyInteger('PvTargetTotalID', 0);
 
-        $this->RegisterPropertyBoolean('EnableSankey', true);
+        $this->RegisterPropertyBoolean('ShowSankeyPeriod', true);
+        $this->RegisterPropertyBoolean('ShowSankeyLive', true);
         $this->RegisterPropertyBoolean('SankeyUseLiveWatts', true);
+        $this->RegisterPropertyInteger('SankeyLivePvID', 0);
+        $this->RegisterPropertyInteger('SankeyLiveGridID', 0);
+        $this->RegisterPropertyInteger('SankeyLiveLoadID', 0);
+        $this->RegisterPropertyInteger('SankeyLiveBatteryID', 0);
         $this->RegisterPropertyBoolean('SankeyShowPercentages', true);
         $this->RegisterPropertyBoolean('SankeyAnimate', true);
 
@@ -1430,6 +1435,26 @@ class EnergyDashboard extends IPSModule
 
 
 
+
+    private function GetConfiguredLivePowerVarId(string $kind): int
+    {
+        $map = [
+            'pv' => ['SankeyLivePvID', 'PvPowerID'],
+            'grid' => ['SankeyLiveGridID', 'GridPowerID'],
+            'load' => ['SankeyLiveLoadID', 'LoadPowerID'],
+            'battery' => ['SankeyLiveBatteryID', 'BatteryPowerID']
+        ];
+        $props = $map[$kind] ?? null;
+        if ($props === null) {
+            return 0;
+        }
+        $preferred = $this->ReadPropertyInteger($props[0]);
+        if ($preferred > 0) {
+            return $preferred;
+        }
+        return $this->ReadPropertyInteger($props[1]);
+    }
+
     private function GetCurrentPowerValueKw(int $varID, bool $invert): float
     {
         if (!$this->IsValidVar($varID)) {
@@ -1440,10 +1465,10 @@ class EnergyDashboard extends IPSModule
 
     private function GetSankeyLiveFlowsKw(): array
     {
-        $pv = max(0.0, $this->GetCurrentPowerValueKw($this->ReadPropertyInteger('PvPowerID'), $this->ReadPropertyBoolean('InvertPv')));
-        $grid = $this->GetCurrentPowerValueKw($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'));
-        $load = max(0.0, $this->GetCurrentPowerValueKw($this->ReadPropertyInteger('LoadPowerID'), $this->ReadPropertyBoolean('InvertLoad')));
-        $battery = $this->GetCurrentPowerValueKw($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'));
+        $pv = max(0.0, $this->GetCurrentPowerValueKw($this->GetConfiguredLivePowerVarId('pv'), $this->ReadPropertyBoolean('InvertPv')));
+        $grid = $this->GetCurrentPowerValueKw($this->GetConfiguredLivePowerVarId('grid'), $this->ReadPropertyBoolean('InvertGrid'));
+        $load = max(0.0, $this->GetCurrentPowerValueKw($this->GetConfiguredLivePowerVarId('load'), $this->ReadPropertyBoolean('InvertLoad')));
+        $battery = $this->GetCurrentPowerValueKw($this->GetConfiguredLivePowerVarId('battery'), $this->ReadPropertyBoolean('InvertBattery'));
 
         $gridImport = max(0.0, $grid);
         $gridExport = max(0.0, -$grid);
@@ -1520,7 +1545,7 @@ class EnergyDashboard extends IPSModule
 
     private function GetSankeyHtml(array $totals, string $label, bool $liveMode = false): string
     {
-        if (!$this->ReadPropertyBoolean('EnableSankey')) {
+        if (($liveMode && !$this->ReadPropertyBoolean('ShowSankeyLive')) || (!$liveMode && !$this->ReadPropertyBoolean('ShowSankeyPeriod'))) {
             return '';
         }
 
