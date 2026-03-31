@@ -1077,7 +1077,19 @@ class EnergyDashboard extends IPSModule
     private function GetOverviewHtml(array $t): string
     {
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>.edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.edb-title{font-size:24px;font-weight:700}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:#fff;border:1px solid #d0d0d0;border-radius:14px}.edb-box{background:#fff;border:1px solid #e1e1e1;border-radius:12px;padding:12px}.edb-label{font-size:12px;color:#666;margin-bottom:4px}.edb-value{font-size:20px;font-weight:700}.edb-section{font-size:13px;font-weight:700;color:#666;margin:10px 0 6px 0}</style>'
+            . '<style>
+            .edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+            .edb-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+            .edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+            .edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+            .edb-title{font-size:24px;font-weight:700}
+            .edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:#fff;border:1px solid #d0d0d0;border-radius:14px}
+            .edb-box{background:#fff;border:1px solid #e1e1e1;border-radius:12px;padding:12px}
+            .edb-label{font-size:12px;color:#666;margin-bottom:4px}
+            .edb-value{font-size:20px;font-weight:700}
+            .edb-section{font-size:14px;font-weight:700;color:#555;margin-bottom:6px}
+            </style>'
+
             . '<div class="edb-card">'
             . '<div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div><div class="edb-badge">+' . $this->Fmt((float) $t['netUsage']) . ' kWh</div></div>'
 
@@ -1086,15 +1098,27 @@ class EnergyDashboard extends IPSModule
             . $this->OverviewBox('Bezug', $this->Fmt((float) $t['gridImport']) . ' kWh')
             . $this->OverviewBox('Einspeisung', $this->Fmt((float) $t['gridExport']) . ' kWh')
             . $this->OverviewBox('Verbrauch', $this->Fmt((float) $t['load']) . ' kWh')
-            . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh')
-            . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %')
             . '</div>'
 
-            . '<div class="edb-section">Batterie-Analyse</div>'
-            . '<div class="edb-grid">'
-            . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
-            . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
-            . $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %')
+            . '<div class="edb-2col" style="margin-top:12px;">'
+
+                . '<div>'
+                . '<div class="edb-section">Eigenverbrauch & Autarkie</div>'
+                . '<div class="edb-grid">'
+                . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh')
+                . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %')
+                . '</div>'
+                . '</div>'
+
+                . '<div>'
+                . '<div class="edb-section">Batterie-Analyse</div>'
+                . '<div class="edb-grid">'
+                . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
+                . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
+                . $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %')
+                . '</div>'
+                . '</div>'
+
             . '</div>'
 
             . '</div></div>';
