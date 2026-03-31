@@ -269,6 +269,11 @@
             2
           ],
           "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowSocOverlay",
+          "caption": "SoC im Stromquellen-Chart anzeigen"
         }
       ]
     },
