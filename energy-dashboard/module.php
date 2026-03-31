@@ -314,7 +314,7 @@ class EnergyDashboard extends IPSModule
         $usageChart  = $this->BuildUsageChartData($archiveID, $rangeStart, $rangeEnd);
         $totals      = $this->ResolveTotalsForRange($archiveID, $rangeStart, $rangeEnd, $sourceChart);
         $targetComparison = $this->GetTargetComparisonTotals($archiveID, $rangeStart, $rangeEnd, $totals);
-        $peakValues = $this->GetPeakValues($sourceChart);
+        $peakValues = $this->GetPeakValues($archiveID, $rangeStart, $rangeEnd);
 
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals, $targetComparison, $peakValues));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
@@ -835,7 +835,7 @@ class EnergyDashboard extends IPSModule
 
 
 
-    private function GetPeakValues(array $sourceChart): array
+    private function GetPeakValues(int $archiveID, int $rangeStart, int $rangeEnd): array
     {
         $result = [
             'pv' => 0.0,
@@ -847,16 +847,20 @@ class EnergyDashboard extends IPSModule
             return $result;
         }
 
-        if (isset($sourceChart['pv']) && is_array($sourceChart['pv']) && count($sourceChart['pv']) > 0) {
-            $result['pv'] = round(max(array_map('floatval', $sourceChart['pv'])), 2);
+        $mode = $this->ReadAttributeString('PeriodMode');
+        $aggregation = ($mode === 'day' || $mode === 'week') ? $this->ReadPropertyInteger('SourceAggregation') : 0;
+        $series = $this->BuildPowerSeries($archiveID, $rangeStart, $rangeEnd, $aggregation);
+
+        if (isset($series['pv']) && is_array($series['pv']) && count($series['pv']) > 0) {
+            $result['pv'] = round(max(array_map('floatval', $series['pv'])), 2);
         }
-        if (isset($sourceChart['load']) && is_array($sourceChart['load']) && count($sourceChart['load']) > 0) {
-            $result['load'] = round(max(array_map('floatval', $sourceChart['load'])), 2);
+        if (isset($series['load']) && is_array($series['load']) && count($series['load']) > 0) {
+            $result['load'] = round(max(array_map('floatval', $series['load'])), 2);
         }
-        if (isset($sourceChart['grid']) && is_array($sourceChart['grid']) && count($sourceChart['grid']) > 0) {
+        if (isset($series['grid']) && is_array($series['grid']) && count($series['grid']) > 0) {
             $gridVals = array_map(function ($v) {
                 return max(0.0, (float) $v);
-            }, $sourceChart['grid']);
+            }, $series['grid']);
             if (count($gridVals) > 0) {
                 $result['gridImport'] = round(max($gridVals), 2);
             }
