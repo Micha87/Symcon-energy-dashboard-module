@@ -688,7 +688,8 @@ class EnergyDashboard extends IPSModule
         $viewMode = $this->GetConfiguredViewMode($mode, 'sources');
 
         if ($viewMode === 'hours') {
-            $aligned = $this->BuildPowerSeries($archiveID, $start, $end, $this->ReadPropertyInteger('SourceAggregation'));
+            $aggregation = ($mode === 'day' || $mode === 'week') ? $this->ReadPropertyInteger('SourceAggregation') : 0;
+            $aligned = $this->BuildPowerSeries($archiveID, $start, $end, $aggregation);
             $aligned = $this->RelabelAlignedSeriesForMode($aligned, $mode);
             $aligned = $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
             $aligned['unit'] = 'kW';
@@ -714,7 +715,8 @@ class EnergyDashboard extends IPSModule
         $viewMode = $this->GetConfiguredViewMode($mode, 'usage');
 
         if ($viewMode === 'hours') {
-            $aligned = $this->BuildPowerSeries($archiveID, $start, $end, $this->ReadPropertyInteger('UsageAggregation'));
+            $aggregation = ($mode === 'day' || $mode === 'week') ? $this->ReadPropertyInteger('UsageAggregation') : 0;
+            $aligned = $this->BuildPowerSeries($archiveID, $start, $end, $aggregation);
             $buckets = [];
             $count = count($aligned['timestamps']);
             if ($count < 2) {
@@ -1117,11 +1119,11 @@ class EnergyDashboard extends IPSModule
             . '<div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
             . '<script>(function(){const d=' . $json . ';const chartType="' . $typeEsc . '";new Chart(document.getElementById("edbSourceChart"),{type:chartType,data:{labels:d.labels,datasets:['
-            . '{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:false,tension:.25,pointRadius:0},'
-            . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0},'
-            . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.85)",backgroundColor:"rgba(0,0,0,.08)",borderDash:[6,4],tension:.2,pointRadius:0},'
-            . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.2,pointRadius:0}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 200 ? 18 : (d.labels.length > 60 ? 14 : 12)),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}}}}}});})();</script>'
+            . '{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:false,tension:.25,pointRadius:0,borderWidth:2},'
+            . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0,borderWidth:2},'
+            . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.95)",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
+            . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.15,pointRadius:0,borderWidth:2.5}'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);if(typeof lbl!=="string"){return lbl;}const parts=lbl.split(" ");return parts[0];}}}}}});})();</script>'
             . '</div>';
     }
 
