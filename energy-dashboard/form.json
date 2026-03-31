@@ -318,8 +318,13 @@
       "items": [
         {
           "type": "CheckBox",
-          "name": "EnableSankey",
-          "caption": "Sankey anzeigen"
+          "name": "ShowSankeyPeriod",
+          "caption": "Sankey Zeitraum (kWh) anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowSankeyLive",
+          "caption": "Sankey Live (kW) anzeigen"
         },
         {
           "type": "CheckBox",
@@ -335,6 +340,46 @@
           "type": "CheckBox",
           "name": "SankeyAnimate",
           "caption": "Animation bei Updates aktivieren"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "SankeyLivePvID",
+          "caption": "Live PV-Leistung (W, optional eigene Variable)",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "SankeyLiveGridID",
+          "caption": "Live Netzleistung (W, optional eigene Variable)",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "SankeyLiveLoadID",
+          "caption": "Live Verbrauch (W, optional eigene Variable)",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "SankeyLiveBatteryID",
+          "caption": "Live Batterie-Leistung (W, optional eigene Variable)",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
         }
       ]
     },
