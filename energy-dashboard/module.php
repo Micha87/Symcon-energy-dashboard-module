@@ -63,18 +63,7 @@ class EnergyDashboard extends IPSModule
 
         $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
-        $this->RegisterPropertyString('UseCustomTextColor', 'default');
-        $this->RegisterPropertyString('CustomTextColor', '#222222');
-        $this->RegisterPropertyString('ColorPv', '#ff9800');
-        $this->RegisterPropertyString('ColorGrid', '#f44336');
-        $this->RegisterPropertyString('ColorBattery', '#2196f3');
-        $this->RegisterPropertyString('ColorHouse', '#4caf50');
-        $this->RegisterPropertyString('ColorSoc', '#4caf50');
-        $this->RegisterPropertyString('ColorBgLight', '#f7f7f7');
-        $this->RegisterPropertyString('ColorBgDark', '#1f1f1f');
-        $this->RegisterPropertyString('ColorCardLight', '#ffffff');
-        $this->RegisterPropertyString('ColorCardDark', '#2a2a2a');
-
+                                                                                        
         $this->RegisterPropertyBoolean('ShowSankeyPeriod', true);
         $this->RegisterPropertyBoolean('ShowSankeyLive', true);
         $this->RegisterPropertyBoolean('SankeyUseLiveWatts', true);
@@ -109,16 +98,7 @@ class EnergyDashboard extends IPSModule
 
 
 
-    private function ApplyThemePresetToProperties(): void
-    {
-        $preset = $this->ReadPropertyString('ThemePreset');
-        $lastPreset = $this->ReadAttributeString('LastAppliedThemePreset');
-
-        if ($preset === 'custom') {
-            $this->WriteAttributeString('LastAppliedThemePreset', 'custom');
-            return;
-        }
-
+    
         if ($preset === $lastPreset) {
             return;
         }
@@ -175,15 +155,7 @@ class EnergyDashboard extends IPSModule
     }
 
 
-    public function SetThemeCustom(bool $forTextColor = false): void
-    {
-        $this->UpdateFormField('ThemePreset', 'value', 'custom');
-        IPS_SetProperty($this->InstanceID, 'ThemePreset', 'custom');
-        if ($forTextColor) {
-            $this->UpdateFormField('UseCustomTextColor', 'value', 'custom');
-            IPS_SetProperty($this->InstanceID, 'UseCustomTextColor', 'custom');
         }
-    }
 
     public function ResetThemeDefaults(): void
     {
@@ -1533,82 +1505,43 @@ class EnergyDashboard extends IPSModule
     private function GetThemeConfig(): array
     {
         $preset = $this->ReadPropertyString('ThemePreset');
-        $mode = 'light';
-        $transparent = false;
 
-        if ($preset === 'light') {
-            $mode = 'light';
-            $pv = '#ff9800';
-            $grid = '#f44336';
-            $battery = '#2196f3';
-            $house = '#4caf50';
-            $soc = '#4caf50';
-            $bgLight = '#f7f7f7';
-            $bgDark = '#1f1f1f';
-            $cardLight = '#ffffff';
-            $cardDark = '#2a2a2a';
-            $textDefault = '#222222';
-            $mutedDefault = '#666666';
-        } elseif ($preset === 'dark') {
+        if ($preset === 'dark') {
             $mode = 'dark';
-            $pv = '#ff9800';
-            $grid = '#f44336';
-            $battery = '#64b5f6';
-            $house = '#66bb6a';
-            $soc = '#81c784';
-            $bgLight = '#f7f7f7';
-            $bgDark = '#121212';
-            $cardLight = '#ffffff';
-            $cardDark = '#1f1f1f';
-            $textDefault = '#f2f2f2';
-            $mutedDefault = '#bdbdbd';
+            $bg = '#121212';
+            $card = '#1f1f1f';
+            $text = '#f2f2f2';
+            $muted = '#bdbdbd';
         } elseif ($preset === 'transparent') {
             $mode = 'dark';
-            $transparent = true;
-            $pv = '#ff9800';
-            $grid = '#f44336';
-            $battery = '#64b5f6';
-            $house = '#66bb6a';
-            $soc = '#81c784';
-            $bgLight = '#f7f7f7';
-            $bgDark = '#121212';
-            $cardLight = '#ffffff';
-            $cardDark = '#1f1f1f';
-            $textDefault = '#f2f2f2';
-            $mutedDefault = '#bdbdbd';
+            $bg = 'transparent';
+            $card = '#1f1f1f';
+            $text = '#f2f2f2';
+            $muted = '#bdbdbd';
         } else {
             $mode = 'light';
-            $pv = $this->NormalizeHexColor($this->ReadPropertyString('ColorPv'), '#ff9800');
-            $grid = $this->NormalizeHexColor($this->ReadPropertyString('ColorGrid'), '#f44336');
-            $battery = $this->NormalizeHexColor($this->ReadPropertyString('ColorBattery'), '#2196f3');
-            $house = $this->NormalizeHexColor($this->ReadPropertyString('ColorHouse'), '#4caf50');
-            $soc = $this->NormalizeHexColor($this->ReadPropertyString('ColorSoc'), '#4caf50');
-            $bgLight = $this->NormalizeHexColor($this->ReadPropertyString('ColorBgLight'), '#f7f7f7');
-            $bgDark = $this->NormalizeHexColor($this->ReadPropertyString('ColorBgDark'), '#1f1f1f');
-            $cardLight = $this->NormalizeHexColor($this->ReadPropertyString('ColorCardLight'), '#ffffff');
-            $cardDark = $this->NormalizeHexColor($this->ReadPropertyString('ColorCardDark'), '#2a2a2a');
-            $textDefault = '#222222';
-            $mutedDefault = '#666666';
+            $bg = '#f7f7f7';
+            $card = '#ffffff';
+            $text = '#222222';
+            $muted = '#666666';
         }
 
-        $bg = $transparent ? 'transparent' : (($mode === 'dark') ? $bgDark : $bgLight);
-        $card = ($mode === 'dark') ? $cardDark : $cardLight;
-        $text = ($this->ReadPropertyString('UseCustomTextColor') === 'custom')
-            ? $this->NormalizeHexColor($this->ReadPropertyString('CustomTextColor'), $textDefault)
-            : (($mode === 'dark') ? '#f2f2f2' : $textDefault);
-        $muted = ($this->ReadPropertyString('UseCustomTextColor') === 'custom')
-            ? $text
-            : (($mode === 'dark') ? '#bdbdbd' : $mutedDefault);
-        $border = ($mode === 'dark') ? '#444444' : '#d9d9d9';
-
         return [
-            'mode' => $mode, 'transparent' => $transparent, 'bg' => $bg, 'card' => $card,
-            'text' => $text, 'muted' => $muted, 'border' => $border,
-            'pv' => $pv, 'grid' => $grid, 'battery' => $battery, 'house' => $house, 'soc' => $soc,
-            'pvFill' => $this->HexToRgba($pv, 0.18),
-            'gridFill' => $this->HexToRgba($grid, 0.12),
-            'batteryFill' => $this->HexToRgba($battery, 0.12),
-            'socFill' => $this->HexToRgba($soc, 0.0)
+            'mode' => $mode,
+            'bg' => $bg,
+            'card' => $card,
+            'text' => $text,
+            'muted' => $muted,
+            'border' => ($mode === 'dark') ? '#444' : '#ddd',
+            'pv' => '#ff9800',
+            'grid' => '#f44336',
+            'battery' => '#2196f3',
+            'house' => '#4caf50',
+            'soc' => '#4caf50',
+            'pvFill' => 'rgba(255,152,0,0.2)',
+            'gridFill' => 'rgba(244,67,54,0.15)',
+            'batteryFill' => 'rgba(33,150,243,0.15)',
+            'socFill' => 'rgba(76,175,80,0.0)'
         ];
     }
 
