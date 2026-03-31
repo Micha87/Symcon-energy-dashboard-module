@@ -1230,79 +1230,84 @@ class EnergyDashboard extends IPSModule
     }
 
     private function GetNavigationHtml(string $label, bool $isCurrentPeriod): string
-    {
-        $modeMap = ['day' => 'Tag', 'week' => 'Woche', 'month' => 'Monat', 'year' => 'Jahr', 'custom' => 'Zeitraum'];
-        $mode = $modeMap[$this->ReadAttributeString('PeriodMode')] ?? 'Tag';
-        $state = $isCurrentPeriod ? 'Aktueller Zeitraum' : 'Historischer Zeitraum';
-        $self = $this->InstanceID;
+{
+    $modeMap = [
+        'day' => 'Tag',
+        'week' => 'Woche',
+        'month' => 'Monat',
+        'year' => 'Jahr'
+    ];
 
-        $start = $this->ReadAttributeInteger('CustomStart');
-        $end = $this->ReadAttributeInteger('CustomEnd');
-        if ($start <= 0) {
-            $start = strtotime('today');
-        }
-        if ($end <= $start) {
-            $end = strtotime('+1 day', $start);
-        }
-        $startDate = date('Y-m-d', $start);
-        $endDate = date('Y-m-d', strtotime('-1 day', $end));
+    $mode = $modeMap[$this->ReadAttributeString('PeriodMode')] ?? 'Tag';
+    $state = $isCurrentPeriod ? 'Aktuell' : 'Historisch';
 
-        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>'
-            . '.edb-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#1f1f1f;color:#fff;border-radius:16px;padding:12px 18px;box-shadow:0 2px 8px rgba(0,0,0,.25)}'
-            . '.edb-left{display:flex;align-items:center;gap:12px;font-weight:700;font-size:18px;cursor:pointer}'
-            . '.edb-cal{font-size:18px;line-height:1}'
-            . '.edb-right{display:flex;align-items:center;gap:10px}'
-            . '.edb-chip{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:999px;background:#0b7db7;color:#fff;font-weight:700}'
-            . '.edb-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;color:#fff;text-decoration:none;font-size:22px;cursor:pointer}'
-            . '.edb-sub{font-size:12px;opacity:.8}'
-            . '.edb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9999}'
-            . '.edb-popup{position:absolute;left:24px;top:80px;width:560px;max-width:calc(100vw - 48px);background:#1f1f1f;color:#fff;border:1px solid #333;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.45);overflow:hidden}'
-            . '.edb-popup-body{display:grid;grid-template-columns:180px 1fr;min-height:320px}'
-            . '.edb-presets{border-right:1px solid #333;padding:10px 0}'
-            . '.edb-preset{display:block;padding:12px 18px;color:#fff;text-decoration:none}'
-            . '.edb-preset:hover{background:#2a2a2a}'
-            . '.edb-content{padding:18px}'
-            . '.edb-title2{font-size:20px;font-weight:700;margin-bottom:12px}'
-            . '.edb-row{display:flex;gap:10px;align-items:center;margin-bottom:12px}'
-            . '.edb-row input{flex:1;padding:10px 12px;border-radius:10px;border:1px solid #444;background:#111;color:#fff}'
-            . '.edb-actions{display:flex;justify-content:flex-end;gap:10px;padding:16px;border-top:1px solid #333}'
-            . '.edb-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:999px;text-decoration:none;font-weight:700;border:1px solid #333;background:#2a2a2a;color:#fff;cursor:pointer}'
-            . '.edb-btn.primary{background:#0b9ad7;border-color:#0b9ad7}'
-            . '</style>'
-            . '<div class="edb-nav">'
-            . '<div class="edb-left" onclick="document.getElementById(\'edbPopup\').style.display=\'block\';">'
-            . '<div class="edb-cal">&#128197;</div><div><div>' . htmlspecialchars($label) . '</div><div class="edb-sub">' . $mode . ' · ' . $state . '</div></div></div>'
-            . '<div class="edb-right">'
-            . '<a class="edb-chip" href="javascript:requestAction(' . $self . ', \'NavPresetToday\', 1);">Jetzt</a>'
-            . '<a class="edb-icon" href="javascript:requestAction(' . $self . ', \'' . self::IDENT_ACTION_PREV . '\', 1);">&#8249;</a>'
-            . '<a class="edb-icon" href="javascript:requestAction(' . $self . ', \'' . self::IDENT_ACTION_NEXT . '\', 1);">&#8250;</a>'
-            . '<div class="edb-icon" onclick="document.getElementById(\'edbPopup\').style.display=\'block\';">&#8942;</div>'
-            . '</div></div>'
-            . '<div id="edbPopup" class="edb-overlay" onclick="if(event.target===this){this.style.display=\'none\';}">'
-            . '<div class="edb-popup">'
-            . '<div class="edb-popup-body">'
-            . '<div class="edb-presets">'
-            . '<a class="edb-preset" href="javascript:requestAction(' . $self . ', \'NavPresetToday\', 1);">Heute</a>'
-            . '<a class="edb-preset" href="javascript:requestAction(' . $self . ', \'NavPresetYesterday\', 1);">Gestern</a>'
-            . '<a class="edb-preset" href="javascript:requestAction(' . $self . ', \'NavPresetThisWeek\', 1);">Diese Woche</a>'
-            . '<a class="edb-preset" href="javascript:requestAction(' . $self . ', \'NavPresetThisMonth\', 1);">Dieser Monat</a>'
-            . '<a class="edb-preset" href="javascript:requestAction(' . $self . ', \'NavPresetThisYear\', 1);">Dieses Jahr</a>'
-            . '<a class="edb-preset" href="javascript:requestAction(' . $self . ', \'NavPresetLast7\', 1);">Letzte 7 Tage</a>'
-            . '<a class="edb-preset" href="javascript:requestAction(' . $self . ', \'NavPresetLast30\', 1);">Letzte 30 Tage</a>'
-            . '<a class="edb-preset" href="javascript:requestAction(' . $self . ', \'NavPresetLast365\', 1);">Letzte 12 Monate</a>'
-            . '</div>'
-            . '<div class="edb-content">'
-            . '<div class="edb-title2">Zeitraum auswählen</div>'
-            . '<div class="edb-row"><input id="edbFromDate" type="date" value="' . $startDate . '"><input id="edbToDate" type="date" value="' . $endDate . '"></div>'
-            . '<div class="edb-sub">Mit Auswählen wird ein benutzerdefinierter Zeitraum gesetzt.</div>'
-            . '</div></div>'
-            . '<div class="edb-actions">'
-            . '<a class="edb-btn" href="javascript:document.getElementById(\'edbPopup\').style.display=\'none\';">Abbrechen</a>'
-            . '<a class="edb-btn primary" href="javascript:(function(){var f=document.getElementById(\'edbFromDate\').value;var t=document.getElementById(\'edbToDate\').value;if(f&&t){requestAction(' . $self . ', \'NavSetCustom\', f+\'|\'+t);document.getElementById(\'edbPopup\').style.display=\'none\';}})();">Auswählen</a>'
-            . '</div></div></div></div>';
-    }
+    $self = $this->InstanceID;
 
+    return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
+        . '<style>
+            .edb-nav {
+                display:flex;
+                align-items:center;
+                justify-content:space-between;
+                gap:10px;
+                background:#1f1f1f;
+                color:#fff;
+                border-radius:16px;
+                padding:12px 18px;
+                box-shadow:0 2px 8px rgba(0,0,0,.25)
+            }
+            .edb-left {
+                display:flex;
+                align-items:center;
+                gap:12px;
+                font-weight:700;
+                font-size:18px;
+            }
+            .edb-right {
+                display:flex;
+                align-items:center;
+                gap:10px;
+            }
+            .edb-chip {
+                padding:8px 14px;
+                border-radius:999px;
+                background:#0b7db7;
+                color:#fff;
+                font-weight:700;
+                cursor:pointer;
+            }
+            .edb-icon {
+                width:30px;
+                height:30px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                cursor:pointer;
+                font-size:22px;
+            }
+            .edb-sub {
+                font-size:12px;
+                opacity:.8;
+            }
+        </style>'
+
+        . '<div class="edb-nav">'
+        . '<div class="edb-left">'
+        . '<div>📅</div>'
+        . '<div>
+            <div>' . htmlspecialchars($label) . '</div>
+            <div class="edb-sub">' . $mode . ' · ' . $state . '</div>
+           </div>'
+        . '</div>'
+
+        . '<div class="edb-right">'
+        . '<a class="edb-chip" href="javascript:requestAction(' . $self . ', \'NavPresetToday\', 1);">Jetzt</a>'
+        . '<a class="edb-icon" href="javascript:requestAction(' . $self . ', \'NavPrev\', 1);">‹</a>'
+        . '<a class="edb-icon" href="javascript:requestAction(' . $self . ', \'NavNext\', 1);">›</a>'
+        . '</div>'
+
+        . '</div></div>';
+}
     private function Fmt(float $value): string
     {
         return number_format($value, 2, ',', '.');
