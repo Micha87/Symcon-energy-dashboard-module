@@ -7,6 +7,7 @@ class EnergyDashboard extends IPSModule
     private const IDENT_OVERVIEW = 'OverviewHTML';
     private const IDENT_SOURCES  = 'SourcesHTML';
     private const IDENT_USAGE    = 'UsageHTML';
+    private const IDENT_SANKEY   = 'SankeyHTML';
 
     private const IDENT_PERIOD_MODE    = 'WF_PeriodMode';
     private const IDENT_REFERENCE_DATE = 'WF_ReferenceDate';
@@ -86,6 +87,7 @@ class EnergyDashboard extends IPSModule
         $this->MaintainVariable(self::IDENT_OVERVIEW, 'Verbrauchsübersicht', VARIABLETYPE_STRING, '~HTMLBox', 0, true);
         $this->MaintainVariable(self::IDENT_SOURCES, 'Stromquellen', VARIABLETYPE_STRING, '~HTMLBox', 1, true);
         $this->MaintainVariable(self::IDENT_USAGE, 'Stromnutzung', VARIABLETYPE_STRING, '~HTMLBox', 2, true);
+        $this->MaintainVariable(self::IDENT_SANKEY, 'Energiefluss Sankey', VARIABLETYPE_STRING, '~HTMLBox', 3, true);
 
         if ($this->ReadPropertyBoolean('CreateWebFrontControls')) {
             $this->EnsureWebFrontControls();
@@ -112,6 +114,7 @@ class EnergyDashboard extends IPSModule
             @$this->SetValue(self::IDENT_OVERVIEW, $error);
             @$this->SetValue(self::IDENT_SOURCES, $error);
             @$this->SetValue(self::IDENT_USAGE, $error);
+            @$this->SetValue(self::IDENT_SANKEY, $error);
             $this->SendDebug(__FUNCTION__, $e->getMessage(), 0);
             $this->SetStatus(201);
         }
@@ -289,6 +292,7 @@ class EnergyDashboard extends IPSModule
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals, $targetComparison));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
         $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart, $totals, $label));
+        $this->SetValue(self::IDENT_SANKEY, $this->GetSankeyHtml($totals, $label));
         $this->SyncControlsFromAttributes();
     }
 
@@ -1413,6 +1417,55 @@ class EnergyDashboard extends IPSModule
     private function OverviewBox(string $label, string $value): string
     {
         return '<div class="edb-box"><div class="edb-label">' . htmlspecialchars($label) . '</div><div class="edb-value">' . htmlspecialchars($value) . '</div></div>';
+    }
+
+
+    private function GetSankeyFlows(array $t): array
+    {
+        $pv = max(0.0, (float) ($t['pv'] ?? 0.0));
+        $gridImport = max(0.0, (float) ($t['gridImport'] ?? 0.0));
+        $gridExport = max(0.0, (float) ($t['gridExport'] ?? 0.0));
+        $load = max(0.0, (float) ($t['load'] ?? 0.0));
+        $battCharge = max(0.0, (float) ($t['batteryCharge'] ?? 0.0));
+        $battDischarge = max(0.0, (float) ($t['batteryDischarge'] ?? 0.0));
+
+        // Näherungsweise Verteilung für Sankey
+        $pvRemaining = max(0.0, $pv - $gridExport);
+        $pvToBattery = min($battCharge, $pvRemaining);
+        $pvRemaining -= $pvToBattery;
+
+        $pvToLoad = min($load, $pvRemaining);
+        $remainingLoad = max(0.0, $load - $pvToLoad);
+
+        $batteryToLoad = min($battDischarge, $remainingLoad);
+        $remainingLoad -= $batteryToLoad;
+
+        $gridToLoad = min($gridImport, $remainingLoad);
+
+        return [
+            ['PV', 'Haus', round($pvToLoad, 2)],
+            ['PV', 'Batterie', round($pvToBattery, 2)],
+            ['PV', 'Netz', round($gridExport, 2)],
+            ['Netz', 'Haus', round($gridToLoad, 2)],
+            ['Batterie', 'Haus', round($batteryToLoad, 2)]
+        ];
+    }
+
+    private function GetSankeyHtml(array $totals, string $label): string
+    {
+        $flows = array_values(array_filter($this->GetSankeyFlows($totals), function ($row) {
+            return (float) $row[2] > 0.01;
+        }));
+
+        $json = json_encode($flows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $labelEsc = htmlspecialchars($label);
+
+        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
+            . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:300px}</style>'
+            . '<div class="edb-card"><div class="edb-title">Energiefluss</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><div id="edbSankeyChart" style="width:100%;height:100%;"></div></div></div>'
+            . '<script src="https://www.gstatic.com/charts/loader.js"></script>'
+            . '<script>(function(){var rows=' . $json . ';google.charts.load("current",{packages:["sankey"]});google.charts.setOnLoadCallback(function(){var data=new google.visualization.DataTable();data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","kWh");data.addRows(rows);var chart=new google.visualization.Sankey(document.getElementById("edbSankeyChart"));chart.draw(data,{height:300,sankey:{node:{label:{fontName:"Arial",fontSize:13}}}});});})();</script>'
+            . '</div>';
     }
 
     private function GetSourcesHtml(array $data, string $label): string
