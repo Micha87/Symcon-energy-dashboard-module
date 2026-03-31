@@ -394,6 +394,29 @@
       "items": [
         {
           "type": "Select",
+          "name": "ThemePreset",
+          "caption": "Design Preset",
+          "options": [
+            {
+              "caption": "Individuell",
+              "value": "custom"
+            },
+            {
+              "caption": "Hell",
+              "value": "light"
+            },
+            {
+              "caption": "Dunkel",
+              "value": "dark"
+            },
+            {
+              "caption": "Transparent",
+              "value": "transparent"
+            }
+          ]
+        },
+        {
+          "type": "Select",
           "name": "ThemeMode",
           "caption": "Design",
           "options": [
@@ -413,47 +436,67 @@
           "caption": "Transparenter Hintergrund"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "Select",
+          "name": "UseCustomTextColor",
+          "caption": "Textfarbe",
+          "options": [
+            {
+              "caption": "Standard",
+              "value": "default"
+            },
+            {
+              "caption": "Eigene Farbe",
+              "value": "custom"
+            }
+          ]
+        },
+        {
+          "type": "SelectColor",
+          "name": "CustomTextColor",
+          "caption": "Eigene Textfarbe"
+        },
+        {
+          "type": "SelectColor",
           "name": "ColorPv",
           "caption": "Farbe PV (Hex)"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "SelectColor",
           "name": "ColorGrid",
           "caption": "Farbe Netz (Hex)"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "SelectColor",
           "name": "ColorBattery",
           "caption": "Farbe Batterie (Hex)"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "SelectColor",
           "name": "ColorHouse",
           "caption": "Farbe Haus (Hex)"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "SelectColor",
           "name": "ColorSoc",
           "caption": "Farbe SoC (Hex)"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "SelectColor",
           "name": "ColorBgLight",
           "caption": "Hintergrund hell (Hex)"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "SelectColor",
           "name": "ColorBgDark",
           "caption": "Hintergrund dunkel (Hex)"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "SelectColor",
           "name": "ColorCardLight",
           "caption": "Karten hell (Hex)"
         },
         {
-          "type": "ValidationTextBox",
+          "type": "SelectColor",
           "name": "ColorCardDark",
           "caption": "Karten dunkel (Hex)"
         }
