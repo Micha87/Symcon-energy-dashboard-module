@@ -626,19 +626,9 @@ class EnergyDashboard extends IPSModule
             return 0.0;
         }
 
-        $mode = $this->ReadAttributeString('PeriodMode');
-        $isToday = date('Y-m-d', $rangeStart) === date('Y-m-d');
-
-        if ($mode === 'day' && $isToday) {
-            return round((float) GetValue($id), 3);
-        }
-
         $start = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
         $end = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
 
-        if ($start === null && $end !== null) {
-            return round(max(0.0, $end), 3);
-        }
         if ($start === null || $end === null) {
             return 0.0;
         }
@@ -649,12 +639,13 @@ class EnergyDashboard extends IPSModule
     private function GetBatteryContentDeltaKwh(int $archiveID, int $rangeStart, int $rangeEnd): float
     {
         $mode = $this->ReadPropertyString('BatteryContentMode');
+        $isToday = date('Y-m-d', $rangeStart) === date('Y-m-d');
 
         if ($mode === 'kwh') {
             $id = $this->ReadPropertyInteger('BatteryContentKwhID');
             if ($this->IsValidVar($id)) {
                 $start = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
-                $end = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
+                $end = $isToday ? (float) GetValue($id) : $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
                 if ($start !== null && $end !== null) {
                     return round($end - $start, 3);
                 }
@@ -666,7 +657,7 @@ class EnergyDashboard extends IPSModule
             $usable = (float) str_replace(',', '.', $this->ReadPropertyString('BatteryUsableCapacityKwh'));
             if ($this->IsValidVar($id) && $usable > 0) {
                 $startSoc = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
-                $endSoc = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
+                $endSoc = $isToday ? (float) GetValue($id) : $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
                 if ($startSoc !== null && $endSoc !== null) {
                     $startKwh = ($startSoc / 100.0) * $usable;
                     $endKwh = ($endSoc / 100.0) * $usable;
@@ -1224,9 +1215,8 @@ class EnergyDashboard extends IPSModule
         $batteryExtra = '';
 
         if ($mode === 'day') {
-            $deltaText = $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh (' . htmlspecialchars((string) $t['batteryDeltaDirection']) . ')';
             $batteryExtra = $this->OverviewBox('Speicherstand aktuell', $this->Fmt((float) $t['batteryContentNowKwh']) . ' kWh')
-                . $this->OverviewBox('Δ Batt.-Inhalt', $deltaText);
+                . $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh');
         } else {
             $batteryExtra = $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh')
                 . $this->OverviewBox('SoC-bereinigt', $this->Fmt((float) $t['batteryEfficiencyAdj']) . ' %');
