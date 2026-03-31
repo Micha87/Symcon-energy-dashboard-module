@@ -52,6 +52,7 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('BatterySocID', 0);
         $this->RegisterPropertyInteger('BatteryContentKwhID', 0);
         $this->RegisterPropertyString('BatteryUsableCapacityKwh', '0');
+        $this->RegisterPropertyInteger('BatteryCyclesID', 0);
 
         $this->RegisterPropertyString('ViewModeWeekSources', 'hours');
         $this->RegisterPropertyString('ViewModeWeekUsage', 'hours');
@@ -368,18 +369,18 @@ class EnergyDashboard extends IPSModule
             if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
                 $dayValues = $this->ReadHistoricalDayEnergy($archiveID, $rangeStart);
                 if ($dayValues !== null) {
-                    return $this->FinalizeTotals($dayValues, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, strtotime('+1 day', $rangeStart)));
+                    return $this->FinalizeTotals($dayValues, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, strtotime('+1 day', $rangeStart)), $archiveID, $rangeStart, strtotime('+1 day', $rangeStart));
                 }
             }
 
             if ($this->ReadPropertyBoolean('UseHistoricalCounterDiff')) {
                 $counterValues = $this->ReadHistoricalCounterDiff($archiveID, $rangeStart, strtotime('+1 day', $rangeStart));
                 if ($counterValues !== null) {
-                    return $this->FinalizeTotals($counterValues, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, strtotime('+1 day', $rangeStart)));
+                    return $this->FinalizeTotals($counterValues, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, strtotime('+1 day', $rangeStart)), $archiveID, $rangeStart, strtotime('+1 day', $rangeStart));
                 }
             }
 
-            return $this->FinalizeTotals($totals, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd));
+            return $this->FinalizeTotals($totals, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd), $archiveID, $rangeStart, $rangeEnd);
         }
 
         $sum = [
@@ -402,7 +403,7 @@ class EnergyDashboard extends IPSModule
             $sum[$k] = round($v, 2);
         }
 
-        return $this->FinalizeTotals($sum, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd));
+        return $this->FinalizeTotals($sum, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd), $archiveID, $rangeStart, $rangeEnd);
     }
 
     private function ResolveSingleDayTotals(int $archiveID, int $dayStart): array
@@ -584,6 +585,48 @@ class EnergyDashboard extends IPSModule
     }
 
 
+
+    private function GetBatteryContentNowKwh(int $archiveID, int $timestamp): float
+    {
+        $mode = $this->ReadPropertyString('BatteryContentMode');
+
+        if ($mode === 'kwh') {
+            $id = $this->ReadPropertyInteger('BatteryContentKwhID');
+            if ($this->IsValidVar($id)) {
+                $val = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $timestamp);
+                return ($val !== null) ? round($val, 2) : 0.0;
+            }
+        }
+
+        if ($mode === 'soc') {
+            $id = $this->ReadPropertyInteger('BatterySocID');
+            $usable = (float) str_replace(',', '.', $this->ReadPropertyString('BatteryUsableCapacityKwh'));
+            if ($this->IsValidVar($id) && $usable > 0) {
+                $soc = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $timestamp);
+                if ($soc !== null) {
+                    return round(($soc / 100.0) * $usable, 2);
+                }
+            }
+        }
+
+        return 0.0;
+    }
+
+    private function GetBatteryCyclesDelta(int $archiveID, int $rangeStart, int $rangeEnd): float
+    {
+        $id = $this->ReadPropertyInteger('BatteryCyclesID');
+        if (!$this->IsValidVar($id)) {
+            return 0.0;
+        }
+
+        $start = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
+        $end = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
+        if ($start === null || $end === null) {
+            return 0.0;
+        }
+        return round(max(0.0, $end - $start), 3);
+    }
+
     private function GetBatteryContentDeltaKwh(int $archiveID, int $rangeStart, int $rangeEnd): float
     {
         $mode = $this->ReadPropertyString('BatteryContentMode');
@@ -638,7 +681,7 @@ class EnergyDashboard extends IPSModule
         return $value;
     }
 
-    private function FinalizeTotals(array $totals, float $batteryDeltaKwh = 0.0): array
+    private function FinalizeTotals(array $totals, float $batteryDeltaKwh = 0.0, int $archiveID = 0, int $rangeStart = 0, int $rangeEnd = 0): array
     {
         $totals = array_merge([
             'pv' => 0.0,
@@ -654,15 +697,31 @@ class EnergyDashboard extends IPSModule
         $totals['autarky'] = $totals['load'] > 0
             ? round(min(100.0, max(0.0, (($totals['load'] - $totals['gridImport']) / $totals['load']) * 100.0)), 1)
             : 0.0;
+
         $totals['batteryEfficiency'] = $totals['batteryCharge'] > 0
             ? round(min(100.0, max(0.0, ($totals['batteryDischarge'] / $totals['batteryCharge']) * 100.0)), 1)
             : 0.0;
 
         $correctedOutput = $totals['batteryDischarge'] + $batteryDeltaKwh;
         $totals['batteryDeltaKwh'] = round($batteryDeltaKwh, 2);
-        $totals['batteryEfficiencyAdj'] = $totals['batteryCharge'] > 0
-            ? round(min(100.0, max(0.0, ($correctedOutput / $totals['batteryCharge']) * 100.0)), 1)
+        $totals['batteryContentNowKwh'] = ($archiveID > 0 && $rangeEnd > 0)
+            ? $this->GetBatteryContentNowKwh($archiveID, $rangeEnd)
             : 0.0;
+        $totals['batteryDeltaDirection'] = ($batteryDeltaKwh > 0.01) ? 'positiv' : (($batteryDeltaKwh < -0.01) ? 'negativ' : 'neutral');
+        $totals['batteryCycles'] = ($archiveID > 0 && $rangeStart > 0 && $rangeEnd > 0)
+            ? $this->GetBatteryCyclesDelta($archiveID, $rangeStart, $rangeEnd)
+            : 0.0;
+
+        $mode = $this->ReadAttributeString('PeriodMode');
+        if ($mode === 'day') {
+            $totals['batteryEfficiencyAdj'] = 0.0;
+            $totals['batteryEfficiencyAdjText'] = 'Tagesansicht: siehe Speicherinhalt / Δ Inhalt';
+        } else {
+            $totals['batteryEfficiencyAdj'] = $totals['batteryCharge'] > 0
+                ? round(min(100.0, max(0.0, ($correctedOutput / $totals['batteryCharge']) * 100.0)), 1)
+                : 0.0;
+            $totals['batteryEfficiencyAdjText'] = '';
+        }
 
         return $totals;
     }
@@ -1142,6 +1201,20 @@ class EnergyDashboard extends IPSModule
 
     private function GetOverviewHtml(array $t): string
     {
+        $mode = $this->ReadAttributeString('PeriodMode');
+        $batteryExtra = '';
+
+        if ($mode === 'day') {
+            $deltaText = $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh (' . htmlspecialchars((string) $t['batteryDeltaDirection']) . ')';
+            $batteryExtra = $this->OverviewBox('Aktuell im Speicher', $this->Fmt((float) $t['batteryContentNowKwh']) . ' kWh')
+                . $this->OverviewBox('Δ Batt.-Inhalt', $deltaText);
+        } else {
+            $batteryExtra = $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh')
+                . $this->OverviewBox('SoC-bereinigt', $this->Fmt((float) $t['batteryEfficiencyAdj']) . ' %');
+        }
+
+        $batteryExtra .= $this->OverviewBox('Zyklen', $this->Fmt((float) ($t['batteryCycles'] ?? 0.0)));
+
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
             . '<style>
             .edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
@@ -1181,9 +1254,8 @@ class EnergyDashboard extends IPSModule
                 . '<div class="edb-grid">'
                 . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
                 . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
-                . $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh')
                 . $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %')
-                . $this->OverviewBox('SoC-bereinigt', $this->Fmt((float) $t['batteryEfficiencyAdj']) . ' %')
+                . $batteryExtra
                 . '</div>'
                 . '</div>'
 
