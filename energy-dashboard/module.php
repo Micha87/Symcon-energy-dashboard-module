@@ -106,7 +106,6 @@ class EnergyDashboard extends IPSModule
     public function ApplyChanges()
     {
         parent::ApplyChanges();
-        $this->ApplyThemePresetToProperties();
 
         $this->MaintainVariable(self::IDENT_OVERVIEW, 'Verbrauchsübersicht', VARIABLETYPE_STRING, '~HTMLBox', 0, true);
         $this->MaintainVariable(self::IDENT_SOURCES, 'Stromquellen', VARIABLETYPE_STRING, '~HTMLBox', 1, true);
