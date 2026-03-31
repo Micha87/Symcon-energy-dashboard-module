@@ -174,6 +174,17 @@ class EnergyDashboard extends IPSModule
         $this->WriteAttributeString('LastAppliedThemePreset', $preset);
     }
 
+
+    public function SetThemeCustom(bool $forTextColor = false): void
+    {
+        $this->UpdateFormField('ThemePreset', 'value', 'custom');
+        IPS_SetProperty($this->InstanceID, 'ThemePreset', 'custom');
+        if ($forTextColor) {
+            $this->UpdateFormField('UseCustomTextColor', 'value', 'custom');
+            IPS_SetProperty($this->InstanceID, 'UseCustomTextColor', 'custom');
+        }
+    }
+
     public function ResetThemeDefaults(): void
     {
         IPS_SetProperty($this->InstanceID, 'ThemePreset', 'custom');
