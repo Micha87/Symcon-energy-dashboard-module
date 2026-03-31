@@ -214,6 +214,71 @@
     },
     {
       "type": "ExpansionPanel",
+      "caption": "Batterie-Effizienz",
+      "items": [
+        {
+          "type": "Select",
+          "name": "BatteryContentMode",
+          "caption": "Batterieinhalt-Basis",
+          "options": [
+            {
+              "caption": "Keine Korrektur",
+              "value": "none"
+            },
+            {
+              "caption": "SoC (%) aus Archiv",
+              "value": "soc"
+            },
+            {
+              "caption": "Batterieinhalt (kWh) aus Archiv",
+              "value": "kwh"
+            }
+          ]
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatterySocID",
+          "caption": "Batterie SoC (%)",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryContentKwhID",
+          "caption": "Batterieinhalt (kWh)",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "BatteryUsableCapacityKwh",
+          "caption": "Nutzbare Batteriekapazität (kWh, für SoC-Berechnung)"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryCyclesID",
+          "caption": "Batterie-Zyklen",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowSocOverlay",
+          "caption": "SoC im Stromquellen-Chart anzeigen"
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
       "caption": "Darstellung je Zeitraum",
       "items": [
         {

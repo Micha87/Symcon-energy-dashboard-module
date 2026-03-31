@@ -48,6 +48,13 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('BatteryChargeEnergyTotalID', 0);
         $this->RegisterPropertyInteger('BatteryDischargeEnergyTotalID', 0);
 
+        $this->RegisterPropertyString('BatteryContentMode', 'none');
+        $this->RegisterPropertyInteger('BatterySocID', 0);
+        $this->RegisterPropertyInteger('BatteryContentKwhID', 0);
+        $this->RegisterPropertyString('BatteryUsableCapacityKwh', '0');
+        $this->RegisterPropertyInteger('BatteryCyclesID', 0);
+        $this->RegisterPropertyBoolean('ShowSocOverlay', true);
+
         $this->RegisterPropertyString('ViewModeWeekSources', 'hours');
         $this->RegisterPropertyString('ViewModeWeekUsage', 'hours');
         $this->RegisterPropertyString('ViewModeMonthSources', 'days');
@@ -363,18 +370,18 @@ class EnergyDashboard extends IPSModule
             if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
                 $dayValues = $this->ReadHistoricalDayEnergy($archiveID, $rangeStart);
                 if ($dayValues !== null) {
-                    return $this->FinalizeTotals($dayValues);
+                    return $this->FinalizeTotals($dayValues, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, strtotime('+1 day', $rangeStart)), $archiveID, $rangeStart, strtotime('+1 day', $rangeStart));
                 }
             }
 
             if ($this->ReadPropertyBoolean('UseHistoricalCounterDiff')) {
                 $counterValues = $this->ReadHistoricalCounterDiff($archiveID, $rangeStart, strtotime('+1 day', $rangeStart));
                 if ($counterValues !== null) {
-                    return $this->FinalizeTotals($counterValues);
+                    return $this->FinalizeTotals($counterValues, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, strtotime('+1 day', $rangeStart)), $archiveID, $rangeStart, strtotime('+1 day', $rangeStart));
                 }
             }
 
-            return $this->FinalizeTotals($totals);
+            return $this->FinalizeTotals($totals, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd), $archiveID, $rangeStart, $rangeEnd);
         }
 
         $sum = [
@@ -397,7 +404,7 @@ class EnergyDashboard extends IPSModule
             $sum[$k] = round($v, 2);
         }
 
-        return $this->FinalizeTotals($sum);
+        return $this->FinalizeTotals($sum, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd), $archiveID, $rangeStart, $rangeEnd);
     }
 
     private function ResolveSingleDayTotals(int $archiveID, int $dayStart): array
@@ -578,7 +585,111 @@ class EnergyDashboard extends IPSModule
         return $endValue - $startValue;
     }
 
-    private function FinalizeTotals(array $totals): array
+
+
+    private function GetBatteryContentNowKwh(int $archiveID, int $timestamp): float
+    {
+        $mode = $this->ReadPropertyString('BatteryContentMode');
+        $isToday = date('Y-m-d', $timestamp) === date('Y-m-d');
+
+        if ($mode === 'kwh') {
+            $id = $this->ReadPropertyInteger('BatteryContentKwhID');
+            if ($this->IsValidVar($id)) {
+                if ($isToday) {
+                    return round((float) GetValue($id), 2);
+                }
+                $val = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $timestamp);
+                return ($val !== null) ? round($val, 2) : 0.0;
+            }
+        }
+
+        if ($mode === 'soc') {
+            $id = $this->ReadPropertyInteger('BatterySocID');
+            $usable = (float) str_replace(',', '.', $this->ReadPropertyString('BatteryUsableCapacityKwh'));
+            if ($this->IsValidVar($id) && $usable > 0) {
+                if ($isToday) {
+                    return round((((float) GetValue($id)) / 100.0) * $usable, 2);
+                }
+                $soc = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $timestamp);
+                if ($soc !== null) {
+                    return round(($soc / 100.0) * $usable, 2);
+                }
+            }
+        }
+
+        return 0.0;
+    }
+
+    private function GetBatteryCyclesDelta(int $archiveID, int $rangeStart, int $rangeEnd): float
+    {
+        $id = $this->ReadPropertyInteger('BatteryCyclesID');
+        if (!$this->IsValidVar($id)) {
+            return 0.0;
+        }
+
+        $start = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
+        if ($start === null) {
+            $start = $this->ReadLoggedValueAtOrAfter($archiveID, $id, $rangeStart);
+        }
+
+        $end = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
+        if ($end === null) {
+            $end = $this->ReadLoggedValueAtOrAfter($archiveID, $id, $rangeEnd - 3600);
+        }
+
+        if ($start === null || $end === null) {
+            return 0.0;
+        }
+
+        return round(max(0.0, $end - $start), 3);
+    }
+
+    private function GetBatteryContentDeltaKwh(int $archiveID, int $rangeStart, int $rangeEnd): float
+    {
+        $dayTotals = $this->ResolveSingleDayTotals($archiveID, strtotime(date('Y-m-d 00:00:00', $rangeStart)));
+        return round((float) $dayTotals['batteryCharge'] - (float) $dayTotals['batteryDischarge'], 3);
+    }
+
+    private function ReadLoggedValueAtOrBefore(int $archiveID, int $varID, int $timestamp): ?float
+    {
+        $rows = @AC_GetLoggedValues($archiveID, $varID, $timestamp - 7 * 86400, $timestamp + 60, 0);
+        if (!is_array($rows) || count($rows) === 0) {
+            return null;
+        }
+
+        $value = null;
+        foreach ($rows as $row) {
+            $ts = (int) $row['TimeStamp'];
+            if ($ts <= $timestamp && isset($row['Value'])) {
+                $value = (float) $row['Value'];
+            }
+        }
+
+        if ($value === null && isset($rows[0]['Value'])) {
+            $value = (float) $rows[0]['Value'];
+        }
+
+        return $value;
+    }
+
+    private function ReadLoggedValueAtOrAfter(int $archiveID, int $varID, int $timestamp): ?float
+    {
+        $rows = @AC_GetLoggedValues($archiveID, $varID, $timestamp, $timestamp + 7 * 86400, 0);
+        if (!is_array($rows) || count($rows) === 0) {
+            return null;
+        }
+
+        foreach ($rows as $row) {
+            if (isset($row['Value'])) {
+                return (float) $row['Value'];
+            }
+        }
+
+        return null;
+    }
+
+
+    private function FinalizeTotals(array $totals, float $batteryDeltaKwh = 0.0, int $archiveID = 0, int $rangeStart = 0, int $rangeEnd = 0): array
     {
         $totals = array_merge([
             'pv' => 0.0,
@@ -594,6 +705,32 @@ class EnergyDashboard extends IPSModule
         $totals['autarky'] = $totals['load'] > 0
             ? round(min(100.0, max(0.0, (($totals['load'] - $totals['gridImport']) / $totals['load']) * 100.0)), 1)
             : 0.0;
+
+        $totals['batteryEfficiency'] = $totals['batteryCharge'] > 0
+            ? round(min(100.0, max(0.0, ($totals['batteryDischarge'] / $totals['batteryCharge']) * 100.0)), 1)
+            : 0.0;
+
+        $correctedOutput = $totals['batteryDischarge'] + $batteryDeltaKwh;
+        $totals['batteryDeltaKwh'] = round($batteryDeltaKwh, 2);
+        $totals['batteryContentNowKwh'] = ($archiveID > 0 && $rangeEnd > 0)
+            ? $this->GetBatteryContentNowKwh($archiveID, $rangeEnd)
+            : 0.0;
+        $totals['batteryDeltaDirection'] = ($batteryDeltaKwh > 0.01) ? 'positiv' : (($batteryDeltaKwh < -0.01) ? 'negativ' : 'neutral');
+        $totals['batteryCycles'] = ($archiveID > 0 && $rangeStart > 0 && $rangeEnd > 0)
+            ? $this->GetBatteryCyclesDelta($archiveID, $rangeStart, $rangeEnd)
+            : 0.0;
+        $totals['batterySocNow'] = $this->GetBatterySocNow();
+
+        $mode = $this->ReadAttributeString('PeriodMode');
+        if ($mode === 'day') {
+            $totals['batteryEfficiencyAdj'] = 0.0;
+            $totals['batteryEfficiencyAdjText'] = 'Tagesansicht: siehe Speicherinhalt / Δ Inhalt';
+        } else {
+            $totals['batteryEfficiencyAdj'] = $totals['batteryCharge'] > 0
+                ? round(min(100.0, max(0.0, ($correctedOutput / $totals['batteryCharge']) * 100.0)), 1)
+                : 0.0;
+            $totals['batteryEfficiencyAdjText'] = '';
+        }
 
         return $totals;
     }
@@ -617,6 +754,46 @@ class EnergyDashboard extends IPSModule
     private function ApplySign(float $value, bool $invert): float
     {
         return $invert ? -$value : $value;
+    }
+
+
+    private function GetBatterySocNow(): float
+    {
+        $id = $this->ReadPropertyInteger('BatterySocID');
+        if ($this->IsValidVar($id)) {
+            return round((float) GetValue($id), 1);
+        }
+        return 0.0;
+    }
+
+    private function GetAggregatedSeriesRaw(int $archiveID, int $varID, int $aggregation, int $start, int $end): array
+    {
+        if (!$this->IsValidVar($varID)) {
+            return [];
+        }
+
+        $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $start, $end, 0);
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($rows as $row) {
+            $ts = (int) $row['TimeStamp'];
+            $value = null;
+            if (isset($row['Avg'])) {
+                $value = (float) $row['Avg'];
+            } elseif (isset($row['Value'])) {
+                $value = (float) $row['Value'];
+            }
+            if ($value === null) {
+                continue;
+            }
+            $result[$ts] = round($value, 3);
+        }
+
+        ksort($result);
+        return $result;
     }
 
     private function BuildPowerSeries(int $archiveID, int $start, int $end, int $aggregation): array
@@ -690,11 +867,41 @@ class EnergyDashboard extends IPSModule
             $aligned = $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
             $aligned['unit'] = 'kW';
             $aligned['chartType'] = 'line';
+            $aligned['soc'] = [];
+
+            if ($mode === 'day' && $this->ReadPropertyBoolean('ShowSocOverlay') && $this->IsValidVar($this->ReadPropertyInteger('BatterySocID'))) {
+                $socRows = $this->GetAggregatedSeriesRaw(
+                    $archiveID,
+                    $this->ReadPropertyInteger('BatterySocID'),
+                    $aggregation,
+                    $start,
+                    $end
+                );
+
+                $socValues = [];
+                $lastSoc = 0.0;
+                foreach ($aligned['timestamps'] as $ts) {
+                    if (isset($socRows[$ts])) {
+                        $lastSoc = (float) $socRows[$ts];
+                    } else {
+                        foreach ($socRows as $socTs => $socVal) {
+                            if ($socTs <= $ts) {
+                                $lastSoc = (float) $socVal;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    $socValues[] = round($lastSoc, 2);
+                }
+                $aligned['soc'] = $socValues;
+            }
+
             return $aligned;
         }
 
         $rows = $this->BuildPeriodEnergyRows($archiveID, $start, $end, $mode, $viewMode);
-        $series = ['labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => [], 'unit' => 'kWh', 'chartType' => 'line'];
+        $series = ['labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => [], 'soc' => [], 'unit' => 'kWh', 'chartType' => 'line'];
         foreach ($rows as $row) {
             $series['labels'][] = $row['label'];
             $series['pv'][] = round((float) $row['pv'], 2);
@@ -1073,19 +1280,67 @@ class EnergyDashboard extends IPSModule
 
     private function GetOverviewHtml(array $t): string
     {
+        $mode = $this->ReadAttributeString('PeriodMode');
+        $batteryExtra = '';
+
+        if ($mode === 'day') {
+            $batteryExtra = $this->OverviewBox('Speicherstand aktuell', $this->Fmt((float) $t['batteryContentNowKwh']) . ' kWh')
+                . $this->OverviewBox('SoC aktuell', $this->Fmt((float) $t['batterySocNow']) . ' %')
+                . $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh');
+        } else {
+            $batteryExtra = $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh')
+                . $this->OverviewBox('SoC-bereinigt', $this->Fmt((float) $t['batteryEfficiencyAdj']) . ' %');
+        }
+
+        
+
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>.edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.edb-title{font-size:24px;font-weight:700}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:#fff;border:1px solid #d0d0d0;border-radius:14px}.edb-box{background:#fff;border:1px solid #e1e1e1;border-radius:12px;padding:12px}.edb-label{font-size:12px;color:#666;margin-bottom:4px}.edb-value{font-size:20px;font-weight:700}</style>'
-            . '<div class="edb-card"><div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div><div class="edb-badge">+'
-            . $this->Fmt((float) $t['netUsage']) . ' kWh</div></div><div class="edb-grid">'
+            . '<style>
+            .edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+            .edb-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+            .edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+            .edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+            .edb-title{font-size:24px;font-weight:700}
+            .edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:#fff;border:1px solid #d0d0d0;border-radius:14px}
+            .edb-box{background:#fff;border:1px solid #e1e1e1;border-radius:12px;padding:12px}
+            .edb-label{font-size:12px;color:#666;margin-bottom:4px}
+            .edb-value{font-size:20px;font-weight:700}
+            .edb-section{font-size:14px;font-weight:700;color:#555;margin-bottom:6px}
+            </style>'
+
+            . '<div class="edb-card">'
+            . '<div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div><div class="edb-badge">+' . $this->Fmt((float) $t['netUsage']) . ' kWh</div></div>'
+
+            . '<div class="edb-grid">'
             . $this->OverviewBox('PV', $this->Fmt((float) $t['pv']) . ' kWh')
             . $this->OverviewBox('Bezug', $this->Fmt((float) $t['gridImport']) . ' kWh')
             . $this->OverviewBox('Einspeisung', $this->Fmt((float) $t['gridExport']) . ' kWh')
             . $this->OverviewBox('Verbrauch', $this->Fmt((float) $t['load']) . ' kWh')
-            . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
-            . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
-            . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh')
-            . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %')
-            . '</div></div></div>';
+            . '</div>'
+
+            . '<div class="edb-2col" style="margin-top:12px;">'
+
+                . '<div>'
+                . '<div class="edb-section">Eigenverbrauch & Autarkie</div>'
+                . '<div class="edb-grid">'
+                . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh')
+                . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %')
+                . '</div>'
+                . '</div>'
+
+                . '<div>'
+                . '<div class="edb-section">Batterie-Analyse</div>'
+                . '<div class="edb-grid">'
+                . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
+                . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
+                . ($mode !== 'day' ? $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %') : '')
+                . $batteryExtra
+                . '</div>'
+                . '</div>'
+
+            . '</div>'
+
+            . '</div></div>';
     }
 
     private function OverviewBox(string $label, string $value): string
@@ -1102,7 +1357,8 @@ class EnergyDashboard extends IPSModule
             'pv' => $data['pv'],
             'grid' => $data['grid'],
             'load' => $data['load'],
-            'battery' => $data['battery']
+            'battery' => $data['battery'],
+            'soc' => $data['soc'] ?? []
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
@@ -1114,12 +1370,14 @@ class EnergyDashboard extends IPSModule
             . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
             . '<div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-            . '<script>(function(){const d=' . $json . ';const chartType="' . $typeEsc . '";new Chart(document.getElementById("edbSourceChart"),{type:chartType,data:{labels:d.labels,datasets:['
+            . '<script>(function(){const d=' . $json . ';const chartType="' . $typeEsc . '";const ds=['
             . '{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:false,tension:.25,pointRadius:0,borderWidth:2},'
             . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0,borderWidth:2},'
             . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.95)",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
             . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.15,pointRadius:0,borderWidth:2.5}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}}}}}});})();</script>'
+            . '];'
+            . 'if(Array.isArray(d.soc) && d.soc.length>0){ds.push({label:"SoC",data:d.soc,borderColor:"rgba(76,175,80,1)",backgroundColor:"rgba(76,175,80,0)",borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"});}'
+            . 'new Chart(document.getElementById("edbSourceChart"),{type:chartType,data:{labels:d.labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,grid:{drawOnChartArea:false},title:{display:true,text:"SoC %"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}}}}}});})();</script>'
             . '</div>';
     }
 
