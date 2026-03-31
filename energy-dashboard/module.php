@@ -61,8 +61,11 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('PvTargetDayID', 0);
         $this->RegisterPropertyInteger('PvTargetTotalID', 0);
 
+        $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
         $this->RegisterPropertyBoolean('TransparentBackground', false);
+        $this->RegisterPropertyString('UseCustomTextColor', 'default');
+        $this->RegisterPropertyString('CustomTextColor', '#222222');
         $this->RegisterPropertyString('ColorPv', '#ff9800');
         $this->RegisterPropertyString('ColorGrid', '#f44336');
         $this->RegisterPropertyString('ColorBattery', '#2196f3');
@@ -1433,8 +1436,20 @@ class EnergyDashboard extends IPSModule
 
     private function GetThemeConfig(): array
     {
+        $preset = $this->ReadPropertyString('ThemePreset');
         $mode = $this->ReadPropertyString('ThemeMode');
+
+        if ($preset === 'light') {
+            $mode = 'light';
+        } elseif ($preset === 'dark') {
+            $mode = 'dark';
+        } elseif ($preset === 'transparent') {
+            $mode = 'dark';
+        }
         $transparent = $this->ReadPropertyBoolean('TransparentBackground');
+        if ($preset === 'transparent') {
+            $transparent = true;
+        }
 
         $pv = $this->NormalizeHexColor($this->ReadPropertyString('ColorPv'), '#ff9800');
         $grid = $this->NormalizeHexColor($this->ReadPropertyString('ColorGrid'), '#f44336');
@@ -1449,8 +1464,14 @@ class EnergyDashboard extends IPSModule
 
         $bg = $transparent ? 'transparent' : (($mode === 'dark') ? $bgDark : $bgLight);
         $card = ($mode === 'dark') ? $cardDark : $cardLight;
-        $text = ($mode === 'dark') ? '#f2f2f2' : '#222222';
-        $muted = ($mode === 'dark') ? '#bdbdbd' : '#666666';
+        $textDefault = ($mode === 'dark') ? '#f2f2f2' : '#222222';
+        $text = ($this->ReadPropertyString('UseCustomTextColor') === 'custom')
+            ? $this->NormalizeHexColor($this->ReadPropertyString('CustomTextColor'), $textDefault)
+            : $textDefault;
+        $mutedDefault = ($mode === 'dark') ? '#bdbdbd' : '#666666';
+        $muted = ($this->ReadPropertyString('UseCustomTextColor') === 'custom')
+            ? $text
+            : $mutedDefault;
         $border = ($mode === 'dark') ? '#444444' : '#d9d9d9';
 
         return [
@@ -1612,7 +1633,7 @@ class EnergyDashboard extends IPSModule
             . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px}.edb-wrap{position:relative;height:300px}.edb-tip{position:absolute;display:none;background:rgba(33,33,33,.96);color:#fff;padding:8px;border-radius:8px;font-size:12px}.edb-sub{font-size:12px;color:' . $theme['muted'] . ';margin-bottom:10px}</style>'
             . '<div class="edb-card"><div style="font-size:20px;font-weight:bold;margin-bottom:6px;">' . $title . '</div><div class="edb-sub">' . htmlspecialchars($label) . '</div><div style="margin-bottom:10px;">' . $valuesHtml . '</div><div class="edb-wrap"><div id="' . $containerId . '" style="width:100%;height:100%;"></div><div id="' . $tipId . '" class="edb-tip"></div></div></div>'
             . '<script src="https://www.gstatic.com/charts/loader.js"></script>'
-            . '<script>(function(){var rows=' . $json . ';var tooltipMap=' . $tooltipJson . ';var theme=' . $themeJson . ';var showPct=' . ($showPercentages ? 'true' : 'false') . ';var liveMode=' . $liveFlag . ';google.charts.load("current",{packages:["sankey"]});google.charts.setOnLoadCallback(draw);function draw(){var data=new google.visualization.DataTable();data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","Wert");data.addRows(rows);var el=document.getElementById("' . $containerId . '");if(!el){return;}var chart=new google.visualization.Sankey(el);chart.draw(data,{height:300,tooltip:{trigger:"none"},sankey:{node:{colors:[theme.pv,theme.house,theme.battery,theme.grid]},link:{colorMode:"gradient",colors:[theme.pv,theme.house,theme.battery,theme.grid]}}});google.visualization.events.addListener(chart,"onmouseover",function(e){if(typeof e.row!=="number")return;var from=data.getValue(e.row,0);var to=data.getValue(e.row,1);var meta=tooltipMap[from+"|"+to];if(!meta)return;var tip=document.getElementById("' . $tipId . '");var html="<b>"+from+"→"+to+"</b><br>"+meta.value.toFixed(2)+" "+meta.unit;if(showPct){html+="<br>"+meta.percent.toFixed(1)+" %";}tip.innerHTML=html;tip.style.display="block";});google.visualization.events.addListener(chart,"onmouseout",function(){document.getElementById("' . $tipId . '").style.display="none";});el.addEventListener("mousemove",function(ev){var tip=document.getElementById("' . $tipId . '");tip.style.left=(ev.offsetX+14)+"px";tip.style.top=(ev.offsetY+14)+"px";});}if(liveMode){setInterval(draw,' . $refresh . ');} })();</script>'
+            . '<script>(function(){var rows=' . $json . ';var tooltipMap=' . $tooltipJson . ';var theme=' . $themeJson . ';var showPct=' . ($showPercentages ? 'true' : 'false') . ';var liveMode=' . $liveFlag . ';google.charts.load("current",{packages:["sankey"]});google.charts.setOnLoadCallback(draw);function draw(){var data=new google.visualization.DataTable();data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","Wert");data.addRows(rows);var el=document.getElementById("' . $containerId . '");if(!el){return;}var chart=new google.visualization.Sankey(el);chart.draw(data,{height:300,tooltip:{trigger:"none"},sankey:{node:{colors:[theme.pv,theme.house,theme.battery,theme.grid]},link:{colorMode:"gradient",colors:[theme.pv,theme.house,theme.battery,theme.grid]}}});google.visualization.events.addListener(chart,"onmouseover",function(e){if(typeof e.row!=="number"||e.row<0||e.row>=rows.length)return;var from=data.getValue(e.row,0);var to=data.getValue(e.row,1);var meta=tooltipMap[from+"|"+to];if(!meta)return;var tip=document.getElementById("' . $tipId . '");var html="<b>"+from+"→"+to+"</b><br>"+meta.value.toFixed(2)+" "+meta.unit;if(showPct){html+="<br>"+meta.percent.toFixed(1)+" %";}tip.innerHTML=html;tip.style.display="block";});google.visualization.events.addListener(chart,"onmouseout",function(){document.getElementById("' . $tipId . '").style.display="none";});el.addEventListener("mousemove",function(ev){var tip=document.getElementById("' . $tipId . '");tip.style.left=(ev.offsetX+14)+"px";tip.style.top=(ev.offsetY+14)+"px";});}if(liveMode){setInterval(draw,' . $refresh . ');} })();</script>'
             . '</div>';
     }
 
