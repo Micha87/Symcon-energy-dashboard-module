@@ -102,6 +102,7 @@ class EnergyDashboard extends IPSModule
 
         $this->RegisterAttributeString('PeriodMode', 'day');
         $this->RegisterAttributeInteger('ReferenceTimestamp', 0);
+        $this->RegisterAttributeString('LastAppliedThemePreset', '');
 
         $this->RegisterTimer(self::TIMER_REFRESH, 0, 'EDB_UpdateVisualization($_IPS["TARGET"]);');
     }
@@ -111,8 +112,14 @@ class EnergyDashboard extends IPSModule
     private function ApplyThemePresetToProperties(): void
     {
         $preset = $this->ReadPropertyString('ThemePreset');
+        $lastPreset = $this->ReadAttributeString('LastAppliedThemePreset');
 
         if ($preset === 'custom') {
+            $this->WriteAttributeString('LastAppliedThemePreset', 'custom');
+            return;
+        }
+
+        if ($preset === $lastPreset) {
             return;
         }
 
@@ -161,15 +168,10 @@ class EnergyDashboard extends IPSModule
             ];
         }
 
-        if (count($values) === 0) {
-            return;
-        }
-
         foreach ($values as $name => $value) {
-            if ((string) IPS_GetProperty($this->InstanceID, $name) !== (string) $value) {
-                IPS_SetProperty($this->InstanceID, $name, $value);
-            }
+            IPS_SetProperty($this->InstanceID, $name, $value);
         }
+        $this->WriteAttributeString('LastAppliedThemePreset', $preset);
     }
 
     public function ResetThemeDefaults(): void
