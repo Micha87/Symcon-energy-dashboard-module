@@ -78,7 +78,7 @@ class EnergyDashboard extends IPSModule
         $this->MaintainVariable(self::IDENT_OVERVIEW, 'Verbrauchsübersicht', VARIABLETYPE_STRING, '~HTMLBox', 0, true);
         $this->MaintainVariable(self::IDENT_SOURCES, 'Stromquellen', VARIABLETYPE_STRING, '~HTMLBox', 1, true);
         $this->MaintainVariable(self::IDENT_USAGE, 'Stromnutzung', VARIABLETYPE_STRING, '~HTMLBox', 2, true);
-        $this->MaintainVariable(self::IDENT_NAV, 'Zeitraum', VARIABLETYPE_STRING, '~HTMLBox', 3, true);
+       // $this->MaintainVariable(self::IDENT_NAV, 'Zeitraum', VARIABLETYPE_STRING, '~HTMLBox', 3, true);
 
         if ($this->ReadPropertyBoolean('CreateWebFrontControls')) {
             $this->EnsureWebFrontControls();
