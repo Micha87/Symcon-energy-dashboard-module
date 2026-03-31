@@ -97,80 +97,9 @@ class EnergyDashboard extends IPSModule
     }
 
 
-
-    
-        if ($preset === $lastPreset) {
-            return;
-        }
-
-        $values = [];
-        if ($preset === 'light') {
-            $values = [
-                'ColorPv' => '#ff9800',
-                'ColorGrid' => '#f44336',
-                'ColorBattery' => '#2196f3',
-                'ColorHouse' => '#4caf50',
-                'ColorSoc' => '#4caf50',
-                'ColorBgLight' => '#f7f7f7',
-                'ColorBgDark' => '#1f1f1f',
-                'ColorCardLight' => '#ffffff',
-                'ColorCardDark' => '#2a2a2a',
-                'UseCustomTextColor' => 'default',
-                'CustomTextColor' => '#222222'
-            ];
-        } elseif ($preset === 'dark') {
-            $values = [
-                'ColorPv' => '#ff9800',
-                'ColorGrid' => '#f44336',
-                'ColorBattery' => '#64b5f6',
-                'ColorHouse' => '#66bb6a',
-                'ColorSoc' => '#81c784',
-                'ColorBgLight' => '#f7f7f7',
-                'ColorBgDark' => '#121212',
-                'ColorCardLight' => '#ffffff',
-                'ColorCardDark' => '#1f1f1f',
-                'UseCustomTextColor' => 'default',
-                'CustomTextColor' => '#f2f2f2'
-            ];
-        } elseif ($preset === 'transparent') {
-            $values = [
-                'ColorPv' => '#ff9800',
-                'ColorGrid' => '#f44336',
-                'ColorBattery' => '#64b5f6',
-                'ColorHouse' => '#66bb6a',
-                'ColorSoc' => '#81c784',
-                'ColorBgLight' => '#f7f7f7',
-                'ColorBgDark' => '#121212',
-                'ColorCardLight' => '#ffffff',
-                'ColorCardDark' => '#1f1f1f',
-                'UseCustomTextColor' => 'default',
-                'CustomTextColor' => '#f2f2f2'
-            ];
-        }
-
-        foreach ($values as $name => $value) {
-            IPS_SetProperty($this->InstanceID, $name, $value);
-        }
-        $this->WriteAttributeString('LastAppliedThemePreset', $preset);
-    }
-
-
-        }
-
     public function ResetThemeDefaults(): void
     {
-        IPS_SetProperty($this->InstanceID, 'ThemePreset', 'custom');
-        IPS_SetProperty($this->InstanceID, 'UseCustomTextColor', 'default');
-        IPS_SetProperty($this->InstanceID, 'CustomTextColor', '#222222');
-        IPS_SetProperty($this->InstanceID, 'ColorPv', '#ff9800');
-        IPS_SetProperty($this->InstanceID, 'ColorGrid', '#f44336');
-        IPS_SetProperty($this->InstanceID, 'ColorBattery', '#2196f3');
-        IPS_SetProperty($this->InstanceID, 'ColorHouse', '#4caf50');
-        IPS_SetProperty($this->InstanceID, 'ColorSoc', '#4caf50');
-        IPS_SetProperty($this->InstanceID, 'ColorBgLight', '#f7f7f7');
-        IPS_SetProperty($this->InstanceID, 'ColorBgDark', '#1f1f1f');
-        IPS_SetProperty($this->InstanceID, 'ColorCardLight', '#ffffff');
-        IPS_SetProperty($this->InstanceID, 'ColorCardDark', '#2a2a2a');
+        IPS_SetProperty($this->InstanceID, 'ThemePreset', 'light');
         IPS_ApplyChanges($this->InstanceID);
     }
 
