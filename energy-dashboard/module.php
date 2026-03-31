@@ -60,6 +60,11 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('PvTargetDayID', 0);
         $this->RegisterPropertyInteger('PvTargetTotalID', 0);
 
+        $this->RegisterPropertyBoolean('EnableSankey', true);
+        $this->RegisterPropertyBoolean('SankeyUseLiveWatts', true);
+        $this->RegisterPropertyBoolean('SankeyShowPercentages', true);
+        $this->RegisterPropertyBoolean('SankeyAnimate', true);
+
         $this->RegisterPropertyString('ViewModeWeekSources', 'hours');
         $this->RegisterPropertyString('ViewModeWeekUsage', 'hours');
         $this->RegisterPropertyString('ViewModeMonthSources', 'days');
@@ -1420,6 +1425,64 @@ class EnergyDashboard extends IPSModule
     }
 
 
+
+    private function GetCurrentPowerValueKw(int $varID, bool $invert): float
+    {
+        if (!$this->IsValidVar($varID)) {
+            return 0.0;
+        }
+        return round($this->ApplySign((float) GetValue($varID), $invert) / 1000.0, 3);
+    }
+
+    private function GetSankeyLiveFlowsKw(): array
+    {
+        $pv = max(0.0, $this->GetCurrentPowerValueKw($this->ReadPropertyInteger('PvPowerID'), $this->ReadPropertyBoolean('InvertPv')));
+        $grid = $this->GetCurrentPowerValueKw($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'));
+        $load = max(0.0, $this->GetCurrentPowerValueKw($this->ReadPropertyInteger('LoadPowerID'), $this->ReadPropertyBoolean('InvertLoad')));
+        $battery = $this->GetCurrentPowerValueKw($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'));
+
+        $gridImport = max(0.0, $grid);
+        $gridExport = max(0.0, -$grid);
+        $battCharge = max(0.0, -$battery);
+        $battDischarge = max(0.0, $battery);
+
+        $pvRemaining = max(0.0, $pv - $gridExport);
+        $pvToBattery = min($battCharge, $pvRemaining);
+        $pvRemaining -= $pvToBattery;
+
+        $pvToLoad = min($load, $pvRemaining);
+        $remainingLoad = max(0.0, $load - $pvToLoad);
+
+        $batteryToLoad = min($battDischarge, $remainingLoad);
+        $remainingLoad -= $batteryToLoad;
+
+        $gridToLoad = min($gridImport, $remainingLoad);
+
+        return [
+            ['PV', 'Haus', round($pvToLoad, 3)],
+            ['PV', 'Batterie', round($pvToBattery, 3)],
+            ['PV', 'Netz', round($gridExport, 3)],
+            ['Netz', 'Haus', round($gridToLoad, 3)],
+            ['Batterie', 'Haus', round($batteryToLoad, 3)]
+        ];
+    }
+
+    private function GetSankeyTooltipMap(array $flows, float $total, string $unit): array
+    {
+        $map = [];
+        foreach ($flows as $row) {
+            $key = $row[0] . '|' . $row[1];
+            $value = (float) $row[2];
+            $pct = ($total > 0) ? round(($value / $total) * 100.0, 1) : 0.0;
+            $map[$key] = [
+                'value' => $value,
+                'percent' => $pct,
+                'unit' => $unit
+            ];
+        }
+        return $map;
+    }
+
     private function GetSankeyFlows(array $t): array
     {
         $pv = max(0.0, (float) ($t['pv'] ?? 0.0));
@@ -1453,27 +1516,68 @@ class EnergyDashboard extends IPSModule
 
     private function GetSankeyHtml(array $totals, string $label): string
     {
-        $flows = array_values(array_filter($this->GetSankeyFlows($totals), function ($row) {
-            return (float) $row[2] > 0.01;
-        }));
+        if (!$this->ReadPropertyBoolean('EnableSankey')) {
+            return '';
+        }
 
+        $mode = $this->ReadAttributeString('PeriodMode');
+        $useLiveWatts = ($mode === 'day') && $this->ReadPropertyBoolean('SankeyUseLiveWatts');
+        $showPercentages = $this->ReadPropertyBoolean('SankeyShowPercentages');
+        $animate = $this->ReadPropertyBoolean('SankeyAnimate');
+
+        if ($useLiveWatts) {
+            $flows = array_values(array_filter($this->GetSankeyLiveFlowsKw(), function ($row) {
+                return (float) $row[2] > 0.001;
+            }));
+            $unit = 'kW';
+        } else {
+            $flows = array_values(array_filter($this->GetSankeyFlows($totals), function ($row) {
+                return (float) $row[2] > 0.01;
+            }));
+            $unit = 'kWh';
+        }
+
+        $total = 0.0;
+        foreach ($flows as $row) {
+            $total += (float) $row[2];
+        }
+
+        $tooltipMap = $this->GetSankeyTooltipMap($flows, $total, $unit);
         $json = json_encode($flows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $tooltipJson = json_encode($tooltipMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $labelEsc = htmlspecialchars($label);
+        $subtitle = $useLiveWatts ? ($labelEsc . ' · Live-Werte') : $labelEsc;
 
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:300px}</style>'
-            . '<div class="edb-card"><div class="edb-title">Energiefluss</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><div id="edbSankeyChart" style="width:100%;height:100%;"></div></div></div>'
+            . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:300px}.edb-tip{position:absolute;display:none;pointer-events:none;z-index:5;background:rgba(33,33,33,.92);color:#fff;padding:8px 10px;border-radius:10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.25)}</style>'
+            . '<div class="edb-card"><div class="edb-title">Energiefluss</div><div class="edb-sub">' . $subtitle . '</div><div class="edb-wrap"><div id="edbSankeyChart" style="width:100%;height:100%;"></div><div id="edbSankeyTip" class="edb-tip"></div></div></div>'
             . '<script src="https://www.gstatic.com/charts/loader.js"></script>'
-            . '<script>(function(){var rows=' . $json . ';google.charts.load("current",{packages:["sankey"]});google.charts.setOnLoadCallback(function(){var data=new google.visualization.DataTable();data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","kWh");data.addRows(rows);var chart=new google.visualization.Sankey(document.getElementById("edbSankeyChart"));chart.draw(data,{
-    height:300,
-    sankey:{
-        node:{
-            colors:["#ff9800","#4caf50","#2196f3","#f44336"]
-        },
-        link:{
-            colorMode:"gradient",
-            colors:["#ff9800","#4caf50","#2196f3","#f44336"]
-        }
+            . '<script>(function(){'
+            . 'var rows=' . $json . ';'
+            . 'var tooltipMap=' . $tooltipJson . ';'
+            . 'var showPct=' . ($showPercentages ? 'true' : 'false') . ';'
+            . 'var useAnim=' . ($animate ? 'true' : 'false') . ';'
+            . 'google.charts.load("current",{packages:["sankey"]});'
+            . 'google.charts.setOnLoadCallback(function(){'
+            . 'var data=new google.visualization.DataTable();'
+            . 'data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","Wert");data.addRows(rows);'
+            . 'var chartEl=document.getElementById("edbSankeyChart");'
+            . 'var tip=document.getElementById("edbSankeyTip");'
+            . 'var chart=new google.visualization.Sankey(chartEl);'
+            . 'var options={height:300,animation:(useAnim?{startup:true,duration:500,easing:"out"}:{}),sankey:{node:{colors:["#ff9800","#4caf50","#2196f3","#f44336"]},link:{colorMode:"gradient",colors:["#ff9800","#4caf50","#2196f3","#f44336"]}}};'
+            . 'chart.draw(data,options);'
+            . 'google.visualization.events.addListener(chart,"onmouseover",function(e){'
+            . 'if(typeof e.row!=="number"){return;}'
+            . 'var from=data.getValue(e.row,0);var to=data.getValue(e.row,1);var key=from+"|"+to;var meta=tooltipMap[key];if(!meta){return;}'
+            . 'var html="<b>"+from+" → "+to+"</b><br>"+meta.value.toFixed(2)+" "+meta.unit;'
+            . 'if(showPct){html+="<br>"+meta.percent.toFixed(1)+" %";}'
+            . 'tip.innerHTML=html;tip.style.display="block";'
+            . '});'
+            . 'google.visualization.events.addListener(chart,"onmouseout",function(){tip.style.display="none";});'
+            . 'chartEl.addEventListener("mousemove",function(ev){tip.style.left=(ev.offsetX+14)+"px";tip.style.top=(ev.offsetY+14)+"px";});'
+            . '});'
+            . '})();</script>'
+            . '</div>';
     }
 });});})();</script>'
             . '</div>';
