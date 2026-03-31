@@ -1419,7 +1419,6 @@ class EnergyDashboard extends IPSModule
                 . $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %');
         }
 
-        $targetHtml = '';
         $peakHtml = '';
         if ($this->ReadPropertyBoolean('ShowPeakValues')) {
             $peakHtml = '<div class="edb-section" style="margin-top:12px;">Peak-Werte</div>'
@@ -1429,6 +1428,8 @@ class EnergyDashboard extends IPSModule
                 . $this->OverviewBox('Max Netzbezug', $this->Fmt((float) ($peakValues['gridImport'] ?? 0.0)) . ' kW')
                 . '</div>';
         }
+
+        $targetHtml = '';
         if (($targetComparison['enabled'] ?? false) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
             $targetHtml = '<div class="edb-section" style="margin-top:12px;">Soll / Ist Vergleich</div>'
                 . '<div class="edb-grid">'
@@ -1441,9 +1442,28 @@ class EnergyDashboard extends IPSModule
 
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
             . '<style>.edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.edb-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.edb-title{font-size:24px;font-weight:700}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:' . $theme['card'] . ';border:1px solid ' . $theme['border'] . ';border-radius:14px}.edb-box{background:' . $theme['card'] . ';border:1px solid ' . $theme['border'] . ';border-radius:12px;padding:12px}.edb-label{font-size:12px;color:' . $theme['muted'] . ';margin-bottom:4px}.edb-value{font-size:20px;font-weight:700}.edb-section{font-size:14px;font-weight:700;color:' . $theme['muted'] . ';margin-bottom:6px}</style>'
-            . '<div class="edb-card"><div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div><div class="edb-badge">+' . $this->Fmt((float) $t['netUsage']) . ' kWh</div></div>'
-            . '<div class="edb-grid">' . $this->OverviewBox('PV', $this->Fmt((float) $t['pv']) . ' kWh') . $this->OverviewBox('Bezug', $this->Fmt((float) $t['gridImport']) . ' kWh') . $this->OverviewBox('Einspeisung', $this->Fmt((float) $t['gridExport']) . ' kWh') . $this->OverviewBox('Verbrauch', $this->Fmt((float) $t['load']) . ' kWh') . '</div>'
-            . '<div class="edb-2col" style="margin-top:12px;"><div><div class="edb-section">Eigenverbrauch & Autarkie</div><div class="edb-grid">' . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh') . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %') . '</div></div><div><div class="edb-section">Batterie-Analyse</div><div class="edb-grid">' . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh') . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh') . $batteryExtra . '</div></div></div>' . $targetHtml . '</div></div>';
+            . '<div class="edb-card">'
+            . '<div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div><div class="edb-badge">+' . $this->Fmt((float) $t['netUsage']) . ' kWh</div></div>'
+            . '<div class="edb-grid">'
+            . $this->OverviewBox('PV', $this->Fmt((float) $t['pv']) . ' kWh')
+            . $this->OverviewBox('Bezug', $this->Fmt((float) $t['gridImport']) . ' kWh')
+            . $this->OverviewBox('Einspeisung', $this->Fmt((float) $t['gridExport']) . ' kWh')
+            . $this->OverviewBox('Verbrauch', $this->Fmt((float) $t['load']) . ' kWh')
+            . '</div>'
+            . '<div class="edb-2col" style="margin-top:12px;">'
+            . '<div><div class="edb-section">Eigenverbrauch & Autarkie</div><div class="edb-grid">'
+            . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh')
+            . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %')
+            . '</div></div>'
+            . '<div><div class="edb-section">Batterie-Analyse</div><div class="edb-grid">'
+            . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
+            . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
+            . $batteryExtra
+            . '</div></div>'
+            . '</div>'
+            . $peakHtml
+            . $targetHtml
+            . '</div></div>';
     }
 
     private function OverviewBox(string $label, string $value): string
