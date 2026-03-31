@@ -60,6 +60,7 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyBoolean('EnableTargetComparison', false);
         $this->RegisterPropertyInteger('PvTargetDayID', 0);
         $this->RegisterPropertyInteger('PvTargetTotalID', 0);
+        $this->RegisterPropertyBoolean('ShowPeakValues', false);
 
         $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
@@ -313,8 +314,9 @@ class EnergyDashboard extends IPSModule
         $usageChart  = $this->BuildUsageChartData($archiveID, $rangeStart, $rangeEnd);
         $totals      = $this->ResolveTotalsForRange($archiveID, $rangeStart, $rangeEnd, $sourceChart);
         $targetComparison = $this->GetTargetComparisonTotals($archiveID, $rangeStart, $rangeEnd, $totals);
+        $peakValues = $this->GetPeakValues($sourceChart);
 
-        $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals, $targetComparison));
+        $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals, $targetComparison, $peakValues));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
         $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart, $totals, $label));
         $this->SetValue(self::IDENT_SANKEY, $this->GetSankeyHtml($totals, $label, false));
@@ -831,6 +833,37 @@ class EnergyDashboard extends IPSModule
         return $result;
     }
 
+
+
+    private function GetPeakValues(array $sourceChart): array
+    {
+        $result = [
+            'pv' => 0.0,
+            'load' => 0.0,
+            'gridImport' => 0.0
+        ];
+
+        if (!$this->ReadPropertyBoolean('ShowPeakValues')) {
+            return $result;
+        }
+
+        if (isset($sourceChart['pv']) && is_array($sourceChart['pv']) && count($sourceChart['pv']) > 0) {
+            $result['pv'] = round(max(array_map('floatval', $sourceChart['pv'])), 2);
+        }
+        if (isset($sourceChart['load']) && is_array($sourceChart['load']) && count($sourceChart['load']) > 0) {
+            $result['load'] = round(max(array_map('floatval', $sourceChart['load'])), 2);
+        }
+        if (isset($sourceChart['grid']) && is_array($sourceChart['grid']) && count($sourceChart['grid']) > 0) {
+            $gridVals = array_map(function ($v) {
+                return max(0.0, (float) $v);
+            }, $sourceChart['grid']);
+            if (count($gridVals) > 0) {
+                $result['gridImport'] = round(max($gridVals), 2);
+            }
+        }
+
+        return $result;
+    }
 
     private function GetTargetComparisonTotals(int $archiveID, int $rangeStart, int $rangeEnd, array $totals): array
     {
@@ -1366,7 +1399,7 @@ class EnergyDashboard extends IPSModule
         return count($slice) === 0 ? 0.0 : array_sum($slice) / count($slice);
     }
 
-    private function GetOverviewHtml(array $t, array $targetComparison = []): string
+    private function GetOverviewHtml(array $t, array $targetComparison = [], array $peakValues = []): string
     {
         $theme = $this->GetThemeConfig();
         $mode = $this->ReadAttributeString('PeriodMode');
@@ -1383,6 +1416,15 @@ class EnergyDashboard extends IPSModule
         }
 
         $targetHtml = '';
+        $peakHtml = '';
+        if ($this->ReadPropertyBoolean('ShowPeakValues')) {
+            $peakHtml = '<div class="edb-section" style="margin-top:12px;">Peak-Werte</div>'
+                . '<div class="edb-grid">'
+                . $this->OverviewBox('Max PV', $this->Fmt((float) ($peakValues['pv'] ?? 0.0)) . ' kW')
+                . $this->OverviewBox('Max Verbrauch', $this->Fmt((float) ($peakValues['load'] ?? 0.0)) . ' kW')
+                . $this->OverviewBox('Max Netzbezug', $this->Fmt((float) ($peakValues['gridImport'] ?? 0.0)) . ' kW')
+                . '</div>';
+        }
         if (($targetComparison['enabled'] ?? false) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
             $targetHtml = '<div class="edb-section" style="margin-top:12px;">Soll / Ist Vergleich</div>'
                 . '<div class="edb-grid">'
