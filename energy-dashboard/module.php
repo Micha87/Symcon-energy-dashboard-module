@@ -105,7 +105,7 @@ class EnergyDashboard extends IPSModule
             @$this->SetValue(self::IDENT_OVERVIEW, $error);
             @$this->SetValue(self::IDENT_SOURCES, $error);
             @$this->SetValue(self::IDENT_USAGE, $error);
-            @$this->SetValue(self::IDENT_NAV, $error);
+            //@$this->SetValue(self::IDENT_NAV, $error);
             $this->SendDebug(__FUNCTION__, $e->getMessage(), 0);
             $this->SetStatus(201);
         }
