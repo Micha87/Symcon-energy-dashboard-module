@@ -380,6 +380,82 @@
             2
           ],
           "width": "420px"
+        },
+        {
+          "type": "NumberSpinner",
+          "name": "SankeyLiveRefresh",
+          "caption": "Live Sankey Aktualisierung (Sekunden)"
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
+      "caption": "Design / Farben",
+      "items": [
+        {
+          "type": "Select",
+          "name": "ThemeMode",
+          "caption": "Design",
+          "options": [
+            {
+              "caption": "Hell",
+              "value": "light"
+            },
+            {
+              "caption": "Dunkel",
+              "value": "dark"
+            }
+          ]
+        },
+        {
+          "type": "CheckBox",
+          "name": "TransparentBackground",
+          "caption": "Transparenter Hintergrund"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorPv",
+          "caption": "Farbe PV (Hex)"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorGrid",
+          "caption": "Farbe Netz (Hex)"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorBattery",
+          "caption": "Farbe Batterie (Hex)"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorHouse",
+          "caption": "Farbe Haus (Hex)"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorSoc",
+          "caption": "Farbe SoC (Hex)"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorBgLight",
+          "caption": "Hintergrund hell (Hex)"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorBgDark",
+          "caption": "Hintergrund dunkel (Hex)"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorCardLight",
+          "caption": "Karten hell (Hex)"
+        },
+        {
+          "type": "ValidationTextBox",
+          "name": "ColorCardDark",
+          "caption": "Karten dunkel (Hex)"
         }
       ]
     },
