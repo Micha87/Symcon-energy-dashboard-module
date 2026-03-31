@@ -1421,15 +1421,25 @@ class EnergyDashboard extends IPSModule
 
         $peakHtml = '';
         if ($this->ReadPropertyBoolean('ShowPeakValues')) {
-            $peakHtml = '<div class="edb-section" style="margin-top:12px;">Peak-Werte</div>'
-                . '<div style="display:flex;gap:10px;flex-wrap:nowrap;">'
+            $combinedHtml = '';
+        if ($this->ReadPropertyBoolean('ShowPeakValues')) {
+            $combinedHtml = '<div class="edb-section" style="margin-top:12px;">Peak & Soll/Ist</div>'
+                . '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
                 . $this->OverviewBox('Max PV', $this->Fmt((float) ($peakValues['pv'] ?? 0.0)) . ' kW')
                 . $this->OverviewBox('Max Verbrauch', $this->Fmt((float) ($peakValues['load'] ?? 0.0)) . ' kW')
-                . $this->OverviewBox('Max Netzbezug', $this->Fmt((float) ($peakValues['gridImport'] ?? 0.0)) . ' kW')
-                . '</div>';
-        }
+                . $this->OverviewBox('Max Netzbezug', $this->Fmt((float) ($peakValues['gridImport'] ?? 0.0)) . ' kW');
 
-        $targetHtml = '';
+            if (($targetComparison['enabled'] ?? false) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
+                $combinedHtml .= $this->OverviewBox('Soll', $this->Fmt((float) $targetComparison['target']) . ' kWh')
+                    . $this->OverviewBox('Ist', $this->Fmt((float) $targetComparison['actual']) . ' kWh')
+                    . $this->OverviewBox('Abweichung', $this->Fmt((float) $targetComparison['delta']) . ' kWh')
+                    . $this->OverviewBox('Erfüllung', $this->Fmt((float) $targetComparison['percent']) . ' %');
+            }
+
+            $combinedHtml .= '</div>';
+        } else {
+            $combinedHtml = $targetHtml;
+        }
         if (($targetComparison['enabled'] ?? false) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
             $targetHtml = '<div class="edb-section" style="margin-top:12px;">Soll / Ist Vergleich</div>'
                 . '<div class="edb-grid">'
@@ -1461,8 +1471,7 @@ class EnergyDashboard extends IPSModule
             . $batteryExtra
             . '</div></div>'
             . '</div>'
-            . $peakHtml
-            . $targetHtml
+            . $combinedHtml
             . '</div></div>';
     }
 
