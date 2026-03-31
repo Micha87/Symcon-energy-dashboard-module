@@ -430,6 +430,22 @@
     },
     {
       "type": "ExpansionPanel",
+      "caption": "Peak-Markierung im Chart (optional)",
+      "items": [
+        {
+          "type": "CheckBox",
+          "name": "ShowPeaksInChart",
+          "caption": "Peak-Punkte im Stromquellen-Chart anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowPeakLabelsInChart",
+          "caption": "Peak-Labels im Chart anzeigen"
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
       "caption": "Darstellung je Zeitraum",
       "items": [
         {
