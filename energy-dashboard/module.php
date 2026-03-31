@@ -1422,7 +1422,7 @@ class EnergyDashboard extends IPSModule
         $peakHtml = '';
         if ($this->ReadPropertyBoolean('ShowPeakValues')) {
             $peakHtml = '<div class="edb-section" style="margin-top:12px;">Peak-Werte</div>'
-                . '<div class="edb-grid">'
+                . '<div style="display:flex;gap:10px;flex-wrap:nowrap;">'
                 . $this->OverviewBox('Max PV', $this->Fmt((float) ($peakValues['pv'] ?? 0.0)) . ' kW')
                 . $this->OverviewBox('Max Verbrauch', $this->Fmt((float) ($peakValues['load'] ?? 0.0)) . ' kW')
                 . $this->OverviewBox('Max Netzbezug', $this->Fmt((float) ($peakValues['gridImport'] ?? 0.0)) . ' kW')
