@@ -416,6 +416,10 @@
           ]
         },
         {
+          "type": "Label",
+          "caption": "Hinweis: Für eigene Farben bitte Preset = Individuell wählen."
+        },
+        {
           "type": "Select",
           "name": "UseCustomTextColor",
           "caption": "Textfarbe",
