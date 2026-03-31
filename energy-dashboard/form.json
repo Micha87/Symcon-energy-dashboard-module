@@ -416,21 +416,6 @@
           ]
         },
         {
-          "type": "Select",
-          "name": "ThemeMode",
-          "caption": "Design",
-          "options": [
-            {
-              "caption": "Hell",
-              "value": "light"
-            },
-            {
-              "caption": "Dunkel",
-              "value": "dark"
-            }
-          ]
-        },
-        {
           "type": "CheckBox",
           "name": "TransparentBackground",
           "caption": "Transparenter Hintergrund"
