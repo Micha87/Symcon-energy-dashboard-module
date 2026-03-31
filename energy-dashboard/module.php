@@ -53,6 +53,7 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('BatteryContentKwhID', 0);
         $this->RegisterPropertyString('BatteryUsableCapacityKwh', '0');
         $this->RegisterPropertyInteger('BatteryCyclesID', 0);
+        $this->RegisterPropertyBoolean('ShowSocOverlay', true);
 
         $this->RegisterPropertyString('ViewModeWeekSources', 'hours');
         $this->RegisterPropertyString('ViewModeWeekUsage', 'hours');
@@ -718,6 +719,7 @@ class EnergyDashboard extends IPSModule
         $totals['batteryCycles'] = ($archiveID > 0 && $rangeStart > 0 && $rangeEnd > 0)
             ? $this->GetBatteryCyclesDelta($archiveID, $rangeStart, $rangeEnd)
             : 0.0;
+        $totals['batterySocNow'] = $this->GetBatterySocNow();
 
         $mode = $this->ReadAttributeString('PeriodMode');
         if ($mode === 'day') {
@@ -752,6 +754,46 @@ class EnergyDashboard extends IPSModule
     private function ApplySign(float $value, bool $invert): float
     {
         return $invert ? -$value : $value;
+    }
+
+
+    private function GetBatterySocNow(): float
+    {
+        $id = $this->ReadPropertyInteger('BatterySocID');
+        if ($this->IsValidVar($id)) {
+            return round((float) GetValue($id), 1);
+        }
+        return 0.0;
+    }
+
+    private function GetAggregatedSeriesRaw(int $archiveID, int $varID, int $aggregation, int $start, int $end): array
+    {
+        if (!$this->IsValidVar($varID)) {
+            return [];
+        }
+
+        $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $start, $end, 0);
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($rows as $row) {
+            $ts = (int) $row['TimeStamp'];
+            $value = null;
+            if (isset($row['Avg'])) {
+                $value = (float) $row['Avg'];
+            } elseif (isset($row['Value'])) {
+                $value = (float) $row['Value'];
+            }
+            if ($value === null) {
+                continue;
+            }
+            $result[$ts] = round($value, 3);
+        }
+
+        ksort($result);
+        return $result;
     }
 
     private function BuildPowerSeries(int $archiveID, int $start, int $end, int $aggregation): array
@@ -829,7 +871,7 @@ class EnergyDashboard extends IPSModule
         }
 
         $rows = $this->BuildPeriodEnergyRows($archiveID, $start, $end, $mode, $viewMode);
-        $series = ['labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => [], 'unit' => 'kWh', 'chartType' => 'line'];
+        $series = ['labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => [], 'soc' => [], 'unit' => 'kWh', 'chartType' => 'line'];
         foreach ($rows as $row) {
             $series['labels'][] = $row['label'];
             $series['pv'][] = round((float) $row['pv'], 2);
@@ -1213,6 +1255,7 @@ class EnergyDashboard extends IPSModule
 
         if ($mode === 'day') {
             $batteryExtra = $this->OverviewBox('Speicherstand aktuell', $this->Fmt((float) $t['batteryContentNowKwh']) . ' kWh')
+                . $this->OverviewBox('SoC aktuell', $this->Fmt((float) $t['batterySocNow']) . ' %')
                 . $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh');
         } else {
             $batteryExtra = $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh')
@@ -1284,7 +1327,8 @@ class EnergyDashboard extends IPSModule
             'pv' => $data['pv'],
             'grid' => $data['grid'],
             'load' => $data['load'],
-            'battery' => $data['battery']
+            'battery' => $data['battery'],
+            'soc' => $data['soc'] ?? []
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
@@ -1296,12 +1340,14 @@ class EnergyDashboard extends IPSModule
             . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
             . '<div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-            . '<script>(function(){const d=' . $json . ';const chartType="' . $typeEsc . '";new Chart(document.getElementById("edbSourceChart"),{type:chartType,data:{labels:d.labels,datasets:['
+            . '<script>(function(){const d=' . $json . ';const chartType="' . $typeEsc . '";const ds=['
             . '{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:false,tension:.25,pointRadius:0,borderWidth:2},'
             . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0,borderWidth:2},'
             . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.95)",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
             . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.15,pointRadius:0,borderWidth:2.5}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}}}}}});})();</script>'
+            . '];'
+            . 'if(Array.isArray(d.soc) && d.soc.length>0){ds.push({label:"SoC",data:d.soc,borderColor:"rgba(76,175,80,1)",backgroundColor:"rgba(76,175,80,0)",borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"});}'
+            . 'new Chart(document.getElementById("edbSourceChart"),{type:chartType,data:{labels:d.labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,grid:{drawOnChartArea:false},title:{display:true,text:"SoC %"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}}}}}});})();</script>'
             . '</div>';
     }
 
