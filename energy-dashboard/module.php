@@ -7,7 +7,6 @@ class EnergyDashboard extends IPSModule
     private const IDENT_OVERVIEW = 'OverviewHTML';
     private const IDENT_SOURCES  = 'SourcesHTML';
     private const IDENT_USAGE    = 'UsageHTML';
-   // private const IDENT_NAV      = 'NavigationHTML';
 
     private const IDENT_PERIOD_MODE    = 'WF_PeriodMode';
     private const IDENT_REFERENCE_DATE = 'WF_ReferenceDate';
@@ -65,8 +64,6 @@ class EnergyDashboard extends IPSModule
 
         $this->RegisterAttributeString('PeriodMode', 'day');
         $this->RegisterAttributeInteger('ReferenceTimestamp', 0);
-        $this->RegisterAttributeInteger('CustomStart', 0);
-        $this->RegisterAttributeInteger('CustomEnd', 0);
 
         $this->RegisterTimer(self::TIMER_REFRESH, 0, 'EDB_UpdateVisualization($_IPS["TARGET"]);');
     }
@@ -78,7 +75,6 @@ class EnergyDashboard extends IPSModule
         $this->MaintainVariable(self::IDENT_OVERVIEW, 'Verbrauchsübersicht', VARIABLETYPE_STRING, '~HTMLBox', 0, true);
         $this->MaintainVariable(self::IDENT_SOURCES, 'Stromquellen', VARIABLETYPE_STRING, '~HTMLBox', 1, true);
         $this->MaintainVariable(self::IDENT_USAGE, 'Stromnutzung', VARIABLETYPE_STRING, '~HTMLBox', 2, true);
-       // $this->MaintainVariable(self::IDENT_NAV, 'Zeitraum', VARIABLETYPE_STRING, '~HTMLBox', 3, true);
 
         if ($this->ReadPropertyBoolean('CreateWebFrontControls')) {
             $this->EnsureWebFrontControls();
@@ -105,7 +101,6 @@ class EnergyDashboard extends IPSModule
             @$this->SetValue(self::IDENT_OVERVIEW, $error);
             @$this->SetValue(self::IDENT_SOURCES, $error);
             @$this->SetValue(self::IDENT_USAGE, $error);
-            //@$this->SetValue(self::IDENT_NAV, $error);
             $this->SendDebug(__FUNCTION__, $e->getMessage(), 0);
             $this->SetStatus(201);
         }
@@ -175,75 +170,6 @@ class EnergyDashboard extends IPSModule
                     $this->ShiftPeriod(1);
                 }
                 @SetValue($this->GetIDForIdent(self::IDENT_ACTION_NEXT), 0);
-                break;
-
-            case 'NavPresetToday':
-                $this->GoToToday();
-                break;
-
-            case 'NavPresetYesterday':
-                $this->WriteAttributeString('PeriodMode', 'day');
-                $this->WriteAttributeInteger('ReferenceTimestamp', strtotime('-1 day'));
-                $this->UpdateVisualization();
-                break;
-
-            case 'NavPresetThisWeek':
-                $this->WriteAttributeString('PeriodMode', 'week');
-                $this->WriteAttributeInteger('ReferenceTimestamp', time());
-                $this->UpdateVisualization();
-                break;
-
-            case 'NavPresetThisMonth':
-                $this->WriteAttributeString('PeriodMode', 'month');
-                $this->WriteAttributeInteger('ReferenceTimestamp', time());
-                $this->UpdateVisualization();
-                break;
-
-            case 'NavPresetThisYear':
-                $this->WriteAttributeString('PeriodMode', 'year');
-                $this->WriteAttributeInteger('ReferenceTimestamp', time());
-                $this->UpdateVisualization();
-                break;
-
-            case 'NavPresetLast7':
-                $end = strtotime('today');
-                $start = strtotime('-6 days', $end);
-                $this->WriteAttributeString('PeriodMode', 'custom');
-                $this->WriteAttributeInteger('CustomStart', $start);
-                $this->WriteAttributeInteger('CustomEnd', strtotime('+1 day', $end));
-                $this->UpdateVisualization();
-                break;
-
-            case 'NavPresetLast30':
-                $end = strtotime('today');
-                $start = strtotime('-29 days', $end);
-                $this->WriteAttributeString('PeriodMode', 'custom');
-                $this->WriteAttributeInteger('CustomStart', $start);
-                $this->WriteAttributeInteger('CustomEnd', strtotime('+1 day', $end));
-                $this->UpdateVisualization();
-                break;
-
-            case 'NavPresetLast365':
-                $end = strtotime('today');
-                $start = strtotime('-364 days', $end);
-                $this->WriteAttributeString('PeriodMode', 'custom');
-                $this->WriteAttributeInteger('CustomStart', $start);
-                $this->WriteAttributeInteger('CustomEnd', strtotime('+1 day', $end));
-                $this->UpdateVisualization();
-                break;
-
-            case 'NavSetCustom':
-                $parts = explode('|', (string) $Value);
-                if (count($parts) === 2) {
-                    $start = strtotime($parts[0] . ' 00:00:00');
-                    $end = strtotime($parts[1] . ' 00:00:00');
-                    if ($start !== false && $end !== false && $end >= $start) {
-                        $this->WriteAttributeString('PeriodMode', 'custom');
-                        $this->WriteAttributeInteger('CustomStart', $start);
-                        $this->WriteAttributeInteger('CustomEnd', strtotime('+1 day', $end));
-                        $this->UpdateVisualization();
-                    }
-                }
                 break;
 
             default:
@@ -351,7 +277,6 @@ class EnergyDashboard extends IPSModule
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
         $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart, $totals, $label));
-        //$this->SetValue(self::IDENT_NAV, $this->GetNavigationHtml($label, $isCurrentPeriod));
         $this->SyncControlsFromAttributes();
     }
 
@@ -381,16 +306,6 @@ class EnergyDashboard extends IPSModule
                 $start = strtotime(date('Y-01-01 00:00:00', $reference));
                 $endBoundary = strtotime('+1 year', $start);
                 $label = date('Y', $start);
-                break;
-
-            case 'custom':
-                $start = $this->ReadAttributeInteger('CustomStart');
-                $endBoundary = $this->ReadAttributeInteger('CustomEnd');
-                if ($start <= 0 || $endBoundary <= $start) {
-                    $start = strtotime(date('Y-m-d 00:00:00', $reference));
-                    $endBoundary = strtotime('+1 day', $start);
-                }
-                $label = date('d.m.Y', $start) . ' - ' . date('d.m.Y', strtotime('-1 day', $endBoundary));
                 break;
 
             case 'day':
@@ -1204,7 +1119,7 @@ class EnergyDashboard extends IPSModule
             . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0,borderWidth:2},'
             . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.95)",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
             . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.15,pointRadius:0,borderWidth:2.5}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);if(typeof lbl!=="string"){return lbl;}const parts=lbl.split(" ");return parts[0];}}}}}});})();</script>'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}}}}}});})();</script>'
             . '</div>';
     }
 
@@ -1225,9 +1140,10 @@ class EnergyDashboard extends IPSModule
             . '{label:"Batt. Entladen",data:d.map(x=>x.batteryDischarge),backgroundColor:"rgba(100,181,246,.75)",borderColor:"rgba(66,165,245,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Batt. Laden",data:d.map(x=>-x.batteryCharge),backgroundColor:"rgba(244,143,177,.72)",borderColor:"rgba(236,64,122,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Netzeinspeisung",data:d.map(x=>-x.gridExport),backgroundColor:"rgba(179,157,219,.72)",borderColor:"rgba(126,87,194,1)",borderWidth:1,stack:"energy"}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"kWh"},stacked:true},x:{stacked:true,ticks:{maxRotation:0,minRotation:0}}}}});})();</script>'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"kWh"},stacked:true},x:{stacked:true,ticks:{maxRotation:0,minRotation:0,autoSkip:true,maxTicksLimit:16}}}}});})();</script>'
             . '</div>';
     }
+
 
     private function Fmt(float $value): string
     {
