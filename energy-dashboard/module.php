@@ -351,7 +351,7 @@ class EnergyDashboard extends IPSModule
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
         $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart, $totals, $label));
-        $this->SetValue(self::IDENT_NAV, $this->GetNavigationHtml($label, $isCurrentPeriod));
+        //$this->SetValue(self::IDENT_NAV, $this->GetNavigationHtml($label, $isCurrentPeriod));
         $this->SyncControlsFromAttributes();
     }
 
