@@ -1292,7 +1292,7 @@ class EnergyDashboard extends IPSModule
                 . $this->OverviewBox('SoC-bereinigt', $this->Fmt((float) $t['batteryEfficiencyAdj']) . ' %');
         }
 
-        $batteryExtra .= $this->OverviewBox('Zyklen', $this->Fmt((float) ($t['batteryCycles'] ?? 0.0)));
+        
 
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
             . '<style>
@@ -1333,7 +1333,7 @@ class EnergyDashboard extends IPSModule
                 . '<div class="edb-grid">'
                 . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
                 . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
-                . $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %')
+                . ($mode !== 'day' ? $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %') : '')
                 . $batteryExtra
                 . '</div>'
                 . '</div>'
