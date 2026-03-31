@@ -259,6 +259,16 @@
           "type": "ValidationTextBox",
           "name": "BatteryUsableCapacityKwh",
           "caption": "Nutzbare Batteriekapazität (kWh, für SoC-Berechnung)"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryCyclesID",
+          "caption": "Batterie-Zyklen",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
         }
       ]
     },
