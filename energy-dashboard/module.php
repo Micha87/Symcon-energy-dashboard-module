@@ -63,7 +63,6 @@ class EnergyDashboard extends IPSModule
 
         $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
-        $this->RegisterPropertyBoolean('TransparentBackground', false);
         $this->RegisterPropertyString('UseCustomTextColor', 'default');
         $this->RegisterPropertyString('CustomTextColor', '#222222');
         $this->RegisterPropertyString('ColorPv', '#ff9800');
@@ -107,9 +106,93 @@ class EnergyDashboard extends IPSModule
         $this->RegisterTimer(self::TIMER_REFRESH, 0, 'EDB_UpdateVisualization($_IPS["TARGET"]);');
     }
 
+
+
+    private function ApplyThemePresetToProperties(): void
+    {
+        $preset = $this->ReadPropertyString('ThemePreset');
+
+        if ($preset === 'custom') {
+            return;
+        }
+
+        $values = [];
+        if ($preset === 'light') {
+            $values = [
+                'ColorPv' => '#ff9800',
+                'ColorGrid' => '#f44336',
+                'ColorBattery' => '#2196f3',
+                'ColorHouse' => '#4caf50',
+                'ColorSoc' => '#4caf50',
+                'ColorBgLight' => '#f7f7f7',
+                'ColorBgDark' => '#1f1f1f',
+                'ColorCardLight' => '#ffffff',
+                'ColorCardDark' => '#2a2a2a',
+                'UseCustomTextColor' => 'default',
+                'CustomTextColor' => '#222222'
+            ];
+        } elseif ($preset === 'dark') {
+            $values = [
+                'ColorPv' => '#ff9800',
+                'ColorGrid' => '#f44336',
+                'ColorBattery' => '#64b5f6',
+                'ColorHouse' => '#66bb6a',
+                'ColorSoc' => '#81c784',
+                'ColorBgLight' => '#f7f7f7',
+                'ColorBgDark' => '#121212',
+                'ColorCardLight' => '#ffffff',
+                'ColorCardDark' => '#1f1f1f',
+                'UseCustomTextColor' => 'default',
+                'CustomTextColor' => '#f2f2f2'
+            ];
+        } elseif ($preset === 'transparent') {
+            $values = [
+                'ColorPv' => '#ff9800',
+                'ColorGrid' => '#f44336',
+                'ColorBattery' => '#64b5f6',
+                'ColorHouse' => '#66bb6a',
+                'ColorSoc' => '#81c784',
+                'ColorBgLight' => '#f7f7f7',
+                'ColorBgDark' => '#121212',
+                'ColorCardLight' => '#ffffff',
+                'ColorCardDark' => '#1f1f1f',
+                'UseCustomTextColor' => 'default',
+                'CustomTextColor' => '#f2f2f2'
+            ];
+        }
+
+        if (count($values) === 0) {
+            return;
+        }
+
+        foreach ($values as $name => $value) {
+            if ((string) IPS_GetProperty($this->InstanceID, $name) !== (string) $value) {
+                IPS_SetProperty($this->InstanceID, $name, $value);
+            }
+        }
+    }
+
+    public function ResetThemeDefaults(): void
+    {
+        IPS_SetProperty($this->InstanceID, 'ThemePreset', 'custom');
+        IPS_SetProperty($this->InstanceID, 'UseCustomTextColor', 'default');
+        IPS_SetProperty($this->InstanceID, 'CustomTextColor', '#222222');
+        IPS_SetProperty($this->InstanceID, 'ColorPv', '#ff9800');
+        IPS_SetProperty($this->InstanceID, 'ColorGrid', '#f44336');
+        IPS_SetProperty($this->InstanceID, 'ColorBattery', '#2196f3');
+        IPS_SetProperty($this->InstanceID, 'ColorHouse', '#4caf50');
+        IPS_SetProperty($this->InstanceID, 'ColorSoc', '#4caf50');
+        IPS_SetProperty($this->InstanceID, 'ColorBgLight', '#f7f7f7');
+        IPS_SetProperty($this->InstanceID, 'ColorBgDark', '#1f1f1f');
+        IPS_SetProperty($this->InstanceID, 'ColorCardLight', '#ffffff');
+        IPS_SetProperty($this->InstanceID, 'ColorCardDark', '#2a2a2a');
+        IPS_ApplyChanges($this->InstanceID);
+    }
+
     public function ApplyChanges()
     {
         parent::ApplyChanges();
+        $this->ApplyThemePresetToProperties();
 
         $this->MaintainVariable(self::IDENT_OVERVIEW, 'Verbrauchsübersicht', VARIABLETYPE_STRING, '~HTMLBox', 0, true);
         $this->MaintainVariable(self::IDENT_SOURCES, 'Stromquellen', VARIABLETYPE_STRING, '~HTMLBox', 1, true);
@@ -1437,41 +1520,72 @@ class EnergyDashboard extends IPSModule
     private function GetThemeConfig(): array
     {
         $preset = $this->ReadPropertyString('ThemePreset');
-        $mode = $this->ReadPropertyString('ThemeMode');
+        $mode = 'light';
+        $transparent = false;
 
         if ($preset === 'light') {
             $mode = 'light';
+            $pv = '#ff9800';
+            $grid = '#f44336';
+            $battery = '#2196f3';
+            $house = '#4caf50';
+            $soc = '#4caf50';
+            $bgLight = '#f7f7f7';
+            $bgDark = '#1f1f1f';
+            $cardLight = '#ffffff';
+            $cardDark = '#2a2a2a';
+            $textDefault = '#222222';
+            $mutedDefault = '#666666';
         } elseif ($preset === 'dark') {
             $mode = 'dark';
+            $pv = '#ff9800';
+            $grid = '#f44336';
+            $battery = '#64b5f6';
+            $house = '#66bb6a';
+            $soc = '#81c784';
+            $bgLight = '#f7f7f7';
+            $bgDark = '#121212';
+            $cardLight = '#ffffff';
+            $cardDark = '#1f1f1f';
+            $textDefault = '#f2f2f2';
+            $mutedDefault = '#bdbdbd';
         } elseif ($preset === 'transparent') {
             $mode = 'dark';
-        }
-        $transparent = $this->ReadPropertyBoolean('TransparentBackground');
-        if ($preset === 'transparent') {
             $transparent = true;
+            $pv = '#ff9800';
+            $grid = '#f44336';
+            $battery = '#64b5f6';
+            $house = '#66bb6a';
+            $soc = '#81c784';
+            $bgLight = '#f7f7f7';
+            $bgDark = '#121212';
+            $cardLight = '#ffffff';
+            $cardDark = '#1f1f1f';
+            $textDefault = '#f2f2f2';
+            $mutedDefault = '#bdbdbd';
+        } else {
+            $mode = 'light';
+            $pv = $this->NormalizeHexColor($this->ReadPropertyString('ColorPv'), '#ff9800');
+            $grid = $this->NormalizeHexColor($this->ReadPropertyString('ColorGrid'), '#f44336');
+            $battery = $this->NormalizeHexColor($this->ReadPropertyString('ColorBattery'), '#2196f3');
+            $house = $this->NormalizeHexColor($this->ReadPropertyString('ColorHouse'), '#4caf50');
+            $soc = $this->NormalizeHexColor($this->ReadPropertyString('ColorSoc'), '#4caf50');
+            $bgLight = $this->NormalizeHexColor($this->ReadPropertyString('ColorBgLight'), '#f7f7f7');
+            $bgDark = $this->NormalizeHexColor($this->ReadPropertyString('ColorBgDark'), '#1f1f1f');
+            $cardLight = $this->NormalizeHexColor($this->ReadPropertyString('ColorCardLight'), '#ffffff');
+            $cardDark = $this->NormalizeHexColor($this->ReadPropertyString('ColorCardDark'), '#2a2a2a');
+            $textDefault = '#222222';
+            $mutedDefault = '#666666';
         }
-
-        $pv = $this->NormalizeHexColor($this->ReadPropertyString('ColorPv'), '#ff9800');
-        $grid = $this->NormalizeHexColor($this->ReadPropertyString('ColorGrid'), '#f44336');
-        $battery = $this->NormalizeHexColor($this->ReadPropertyString('ColorBattery'), '#2196f3');
-        $house = $this->NormalizeHexColor($this->ReadPropertyString('ColorHouse'), '#4caf50');
-        $soc = $this->NormalizeHexColor($this->ReadPropertyString('ColorSoc'), '#4caf50');
-
-        $bgLight = $this->NormalizeHexColor($this->ReadPropertyString('ColorBgLight'), '#f7f7f7');
-        $bgDark = $this->NormalizeHexColor($this->ReadPropertyString('ColorBgDark'), '#1f1f1f');
-        $cardLight = $this->NormalizeHexColor($this->ReadPropertyString('ColorCardLight'), '#ffffff');
-        $cardDark = $this->NormalizeHexColor($this->ReadPropertyString('ColorCardDark'), '#2a2a2a');
 
         $bg = $transparent ? 'transparent' : (($mode === 'dark') ? $bgDark : $bgLight);
         $card = ($mode === 'dark') ? $cardDark : $cardLight;
-        $textDefault = ($mode === 'dark') ? '#f2f2f2' : '#222222';
         $text = ($this->ReadPropertyString('UseCustomTextColor') === 'custom')
             ? $this->NormalizeHexColor($this->ReadPropertyString('CustomTextColor'), $textDefault)
-            : $textDefault;
-        $mutedDefault = ($mode === 'dark') ? '#bdbdbd' : '#666666';
+            : (($mode === 'dark') ? '#f2f2f2' : $textDefault);
         $muted = ($this->ReadPropertyString('UseCustomTextColor') === 'custom')
             ? $text
-            : $mutedDefault;
+            : (($mode === 'dark') ? '#bdbdbd' : $mutedDefault);
         $border = ($mode === 'dark') ? '#444444' : '#d9d9d9';
 
         return [
