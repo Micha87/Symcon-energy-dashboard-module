@@ -867,6 +867,36 @@ class EnergyDashboard extends IPSModule
             $aligned = $this->ReduceAlignedSeries($aligned, max(24, $this->ReadPropertyInteger('MaxSourcePoints')));
             $aligned['unit'] = 'kW';
             $aligned['chartType'] = 'line';
+            $aligned['soc'] = [];
+
+            if ($mode === 'day' && $this->ReadPropertyBoolean('ShowSocOverlay') && $this->IsValidVar($this->ReadPropertyInteger('BatterySocID'))) {
+                $socRows = $this->GetAggregatedSeriesRaw(
+                    $archiveID,
+                    $this->ReadPropertyInteger('BatterySocID'),
+                    $aggregation,
+                    $start,
+                    $end
+                );
+
+                $socValues = [];
+                $lastSoc = 0.0;
+                foreach ($aligned['timestamps'] as $ts) {
+                    if (isset($socRows[$ts])) {
+                        $lastSoc = (float) $socRows[$ts];
+                    } else {
+                        foreach ($socRows as $socTs => $socVal) {
+                            if ($socTs <= $ts) {
+                                $lastSoc = (float) $socVal;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    $socValues[] = round($lastSoc, 2);
+                }
+                $aligned['soc'] = $socValues;
+            }
+
             return $aligned;
         }
 
