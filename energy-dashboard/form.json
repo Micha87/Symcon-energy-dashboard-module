@@ -416,11 +416,6 @@
           ]
         },
         {
-          "type": "CheckBox",
-          "name": "TransparentBackground",
-          "caption": "Transparenter Hintergrund"
-        },
-        {
           "type": "Select",
           "name": "UseCustomTextColor",
           "caption": "Textfarbe",
@@ -672,6 +667,11 @@
     {
       "type": "Label",
       "caption": "WebFront-Steuerung über Variablen: Intervall, Referenzdatum, Zurück, Heute, Vor."
+    },
+    {
+      "type": "Button",
+      "caption": "Design auf Standard setzen",
+      "onClick": "EDB_ResetThemeDefaults($id);"
     }
   ],
   "status": [
