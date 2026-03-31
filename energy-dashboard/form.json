@@ -437,52 +437,82 @@
         {
           "type": "SelectColor",
           "name": "CustomTextColor",
-          "caption": "Eigene Textfarbe"
+          "caption": "Eigene Textfarbe",
+          "allowTransparent": false,
+          "value": "#222222",
+          "onChange": "EDB_SetThemeCustom($id, true);"
         },
         {
           "type": "SelectColor",
           "name": "ColorPv",
-          "caption": "Farbe PV (Hex)"
+          "caption": "Farbe PV (Hex)",
+          "allowTransparent": false,
+          "value": "#ff9800",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         },
         {
           "type": "SelectColor",
           "name": "ColorGrid",
-          "caption": "Farbe Netz (Hex)"
+          "caption": "Farbe Netz (Hex)",
+          "allowTransparent": false,
+          "value": "#f44336",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         },
         {
           "type": "SelectColor",
           "name": "ColorBattery",
-          "caption": "Farbe Batterie (Hex)"
+          "caption": "Farbe Batterie (Hex)",
+          "allowTransparent": false,
+          "value": "#2196f3",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         },
         {
           "type": "SelectColor",
           "name": "ColorHouse",
-          "caption": "Farbe Haus (Hex)"
+          "caption": "Farbe Haus (Hex)",
+          "allowTransparent": false,
+          "value": "#4caf50",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         },
         {
           "type": "SelectColor",
           "name": "ColorSoc",
-          "caption": "Farbe SoC (Hex)"
+          "caption": "Farbe SoC (Hex)",
+          "allowTransparent": false,
+          "value": "#4caf50",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         },
         {
           "type": "SelectColor",
           "name": "ColorBgLight",
-          "caption": "Hintergrund hell (Hex)"
+          "caption": "Hintergrund hell (Hex)",
+          "allowTransparent": false,
+          "value": "#f7f7f7",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         },
         {
           "type": "SelectColor",
           "name": "ColorBgDark",
-          "caption": "Hintergrund dunkel (Hex)"
+          "caption": "Hintergrund dunkel (Hex)",
+          "allowTransparent": false,
+          "value": "#1f1f1f",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         },
         {
           "type": "SelectColor",
           "name": "ColorCardLight",
-          "caption": "Karten hell (Hex)"
+          "caption": "Karten hell (Hex)",
+          "allowTransparent": false,
+          "value": "#ffffff",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         },
         {
           "type": "SelectColor",
           "name": "ColorCardDark",
-          "caption": "Karten dunkel (Hex)"
+          "caption": "Karten dunkel (Hex)",
+          "allowTransparent": false,
+          "value": "#2a2a2a",
+          "onChange": "EDB_SetThemeCustom($id, false);"
         }
       ]
     },
