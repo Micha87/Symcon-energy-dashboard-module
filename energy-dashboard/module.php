@@ -55,6 +55,10 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('BatteryCyclesID', 0);
         $this->RegisterPropertyBoolean('ShowSocOverlay', true);
 
+        $this->RegisterPropertyBoolean('EnableTargetComparison', false);
+        $this->RegisterPropertyInteger('PvTargetDayID', 0);
+        $this->RegisterPropertyInteger('PvTargetTotalID', 0);
+
         $this->RegisterPropertyString('ViewModeWeekSources', 'hours');
         $this->RegisterPropertyString('ViewModeWeekUsage', 'hours');
         $this->RegisterPropertyString('ViewModeMonthSources', 'days');
@@ -280,8 +284,9 @@ class EnergyDashboard extends IPSModule
         $sourceChart = $this->BuildSourceChartData($archiveID, $rangeStart, $rangeEnd);
         $usageChart  = $this->BuildUsageChartData($archiveID, $rangeStart, $rangeEnd);
         $totals      = $this->ResolveTotalsForRange($archiveID, $rangeStart, $rangeEnd, $sourceChart);
+        $targetComparison = $this->GetTargetComparisonTotals($archiveID, $rangeStart, $rangeEnd, $totals);
 
-        $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals));
+        $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals, $targetComparison));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
         $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart, $totals, $label));
         $this->SyncControlsFromAttributes();
@@ -710,8 +715,8 @@ class EnergyDashboard extends IPSModule
             ? round(min(100.0, max(0.0, ($totals['batteryDischarge'] / $totals['batteryCharge']) * 100.0)), 1)
             : 0.0;
 
-        $correctedOutput = $totals['batteryDischarge'] + $batteryDeltaKwh;
-        $totals['batteryDeltaKwh'] = round($batteryDeltaKwh, 2);
+        $totals['batteryDeltaKwh'] = round((float) $totals['batteryCharge'] - (float) $totals['batteryDischarge'], 2);
+        $correctedOutput = $totals['batteryDischarge'] + $totals['batteryDeltaKwh'];
         $totals['batteryContentNowKwh'] = ($archiveID > 0 && $rangeEnd > 0)
             ? $this->GetBatteryContentNowKwh($archiveID, $rangeEnd)
             : 0.0;
@@ -793,6 +798,59 @@ class EnergyDashboard extends IPSModule
         }
 
         ksort($result);
+        return $result;
+    }
+
+
+    private function GetTargetComparisonTotals(int $archiveID, int $rangeStart, int $rangeEnd, array $totals): array
+    {
+        $result = [
+            'enabled' => $this->ReadPropertyBoolean('EnableTargetComparison'),
+            'target' => 0.0,
+            'actual' => round((float) ($totals['pv'] ?? 0.0), 2),
+            'delta' => 0.0,
+            'percent' => 0.0
+        ];
+
+        if (!$result['enabled']) {
+            return $result;
+        }
+
+        $target = 0.0;
+        $found = false;
+
+        $dayId = $this->ReadPropertyInteger('PvTargetDayID');
+        if ($this->IsValidVar($dayId)) {
+            for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
+                $val = $this->ReadDayValueFromDailyHistory($archiveID, $dayId, $day);
+                if ($val !== null) {
+                    $target += (float) $val;
+                    $found = true;
+                }
+            }
+        }
+
+        if (!$found) {
+            $totalId = $this->ReadPropertyInteger('PvTargetTotalID');
+            if ($this->IsValidVar($totalId)) {
+                $diff = $this->ReadCounterDiffForDay($archiveID, $totalId, $rangeStart, $rangeEnd);
+                if ($diff !== null) {
+                    $target = (float) $diff;
+                    $found = true;
+                }
+            }
+        }
+
+        if (!$found) {
+            return $result;
+        }
+
+        $result['target'] = round(max(0.0, $target), 2);
+        $result['delta'] = round($result['actual'] - $result['target'], 2);
+        $result['percent'] = $result['target'] > 0
+            ? round(($result['actual'] / $result['target']) * 100.0, 1)
+            : 0.0;
+
         return $result;
     }
 
@@ -1278,7 +1336,7 @@ class EnergyDashboard extends IPSModule
         return count($slice) === 0 ? 0.0 : array_sum($slice) / count($slice);
     }
 
-    private function GetOverviewHtml(array $t): string
+    private function GetOverviewHtml(array $t, array $targetComparison = []): string
     {
         $mode = $this->ReadAttributeString('PeriodMode');
         $batteryExtra = '';
@@ -1289,10 +1347,20 @@ class EnergyDashboard extends IPSModule
                 . $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh');
         } else {
             $batteryExtra = $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh')
-                . $this->OverviewBox('SoC-bereinigt', $this->Fmt((float) $t['batteryEfficiencyAdj']) . ' %');
+                . $this->OverviewBox('SoC-bereinigt', $this->Fmt((float) $t['batteryEfficiencyAdj']) . ' %')
+                . $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %');
         }
 
-        
+        $targetHtml = '';
+        if (($targetComparison['enabled'] ?? False) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
+            $targetHtml = '<div class="edb-section" style="margin-top:12px;">Soll / Ist Vergleich</div>'
+                . '<div class="edb-grid">'
+                . $this->OverviewBox('Soll', $this->Fmt((float) $targetComparison['target']) . ' kWh')
+                . $this->OverviewBox('Ist', $this->Fmt((float) $targetComparison['actual']) . ' kWh')
+                . $this->OverviewBox('Abweichung', $this->Fmt((float) $targetComparison['delta']) . ' kWh')
+                . $this->OverviewBox('Erfüllung', $this->Fmt((float) $targetComparison['percent']) . ' %')
+                . '</div>';
+        }
 
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
             . '<style>
@@ -1333,13 +1401,12 @@ class EnergyDashboard extends IPSModule
                 . '<div class="edb-grid">'
                 . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
                 . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
-                . ($mode !== 'day' ? $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %') : '')
                 . $batteryExtra
                 . '</div>'
                 . '</div>'
 
             . '</div>'
-
+            . $targetHtml
             . '</div></div>';
     }
 
