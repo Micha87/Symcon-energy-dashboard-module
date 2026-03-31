@@ -7,7 +7,6 @@ class EnergyDashboard extends IPSModule
     private const IDENT_OVERVIEW = 'OverviewHTML';
     private const IDENT_SOURCES  = 'SourcesHTML';
     private const IDENT_USAGE    = 'UsageHTML';
-    private const IDENT_NAV      = 'NavigationHTML';
 
     private const IDENT_PERIOD_MODE    = 'WF_PeriodMode';
     private const IDENT_REFERENCE_DATE = 'WF_ReferenceDate';
@@ -76,7 +75,6 @@ class EnergyDashboard extends IPSModule
         $this->MaintainVariable(self::IDENT_OVERVIEW, 'Verbrauchsübersicht', VARIABLETYPE_STRING, '~HTMLBox', 0, true);
         $this->MaintainVariable(self::IDENT_SOURCES, 'Stromquellen', VARIABLETYPE_STRING, '~HTMLBox', 1, true);
         $this->MaintainVariable(self::IDENT_USAGE, 'Stromnutzung', VARIABLETYPE_STRING, '~HTMLBox', 2, true);
-        $this->MaintainVariable(self::IDENT_NAV, 'Zeitraum', VARIABLETYPE_STRING, '~HTMLBox', 3, true);
 
         if ($this->ReadPropertyBoolean('CreateWebFrontControls')) {
             $this->EnsureWebFrontControls();
@@ -103,7 +101,6 @@ class EnergyDashboard extends IPSModule
             @$this->SetValue(self::IDENT_OVERVIEW, $error);
             @$this->SetValue(self::IDENT_SOURCES, $error);
             @$this->SetValue(self::IDENT_USAGE, $error);
-            @$this->SetValue(self::IDENT_NAV, $error);
             $this->SendDebug(__FUNCTION__, $e->getMessage(), 0);
             $this->SetStatus(201);
         }
@@ -280,7 +277,6 @@ class EnergyDashboard extends IPSModule
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
         $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart, $totals, $label));
-        $this->SetValue(self::IDENT_NAV, $this->GetNavigationHtml($label, $isCurrentPeriod));
         $this->SyncControlsFromAttributes();
     }
 
@@ -1123,7 +1119,7 @@ class EnergyDashboard extends IPSModule
             . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0,borderWidth:2},'
             . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.95)",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
             . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.15,pointRadius:0,borderWidth:2.5}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);if(typeof lbl!=="string"){return lbl;}const parts=lbl.split(" ");return parts[0];}}}}}});})();</script>'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}}}}}});})();</script>'
             . '</div>';
     }
 
@@ -1144,20 +1140,10 @@ class EnergyDashboard extends IPSModule
             . '{label:"Batt. Entladen",data:d.map(x=>x.batteryDischarge),backgroundColor:"rgba(100,181,246,.75)",borderColor:"rgba(66,165,245,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Batt. Laden",data:d.map(x=>-x.batteryCharge),backgroundColor:"rgba(244,143,177,.72)",borderColor:"rgba(236,64,122,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Netzeinspeisung",data:d.map(x=>-x.gridExport),backgroundColor:"rgba(179,157,219,.72)",borderColor:"rgba(126,87,194,1)",borderWidth:1,stack:"energy"}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"kWh"},stacked:true},x:{stacked:true,ticks:{maxRotation:0,minRotation:0}}}}});})();</script>'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"kWh"},stacked:true},x:{stacked:true,ticks:{maxRotation:0,minRotation:0,autoSkip:true,maxTicksLimit:16}}}}});})();</script>'
             . '</div>';
     }
 
-    private function GetNavigationHtml(string $label, bool $isCurrentPeriod): string
-    {
-        $modeMap = ['day' => 'Tag', 'week' => 'Woche', 'month' => 'Monat', 'year' => 'Jahr'];
-        $mode = $modeMap[$this->ReadAttributeString('PeriodMode')] ?? 'Tag';
-        $state = $isCurrentPeriod ? 'Aktueller Zeitraum' : 'Historischer Zeitraum';
-
-        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>.edb-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#5b5b5b;color:#fff;border-radius:16px;padding:12px 18px;box-shadow:0 2px 8px rgba(0,0,0,.18)}.edb-left{display:flex;align-items:center;gap:12px;font-weight:700;font-size:18px}.edb-cal{font-size:18px;line-height:1}.edb-right{display:flex;align-items:center;gap:10px}.edb-chip{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:999px;background:#dff3ff;color:#039be5;font-weight:700}.edb-sub{font-size:12px;opacity:.8}</style>'
-            . '<div class="edb-nav"><div class="edb-left"><div class="edb-cal">&#128197;</div><div><div>' . htmlspecialchars($label) . '</div><div class="edb-sub">' . $mode . ' · ' . $state . '</div></div></div><div class="edb-right"><div class="edb-chip">' . $mode . '</div></div></div></div>';
-    }
 
     private function Fmt(float $value): string
     {
