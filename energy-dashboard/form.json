@@ -279,6 +279,41 @@
     },
     {
       "type": "ExpansionPanel",
+      "caption": "Schritt 3 - Soll/Ist Vergleich",
+      "items": [
+        {
+          "type": "CheckBox",
+          "name": "EnableTargetComparison",
+          "caption": "Soll/Ist Vergleich aktivieren"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "PvTargetDayID",
+          "caption": "PV Soll Tages-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "PvTargetTotalID",
+          "caption": "PV Soll Gesamt-kWh",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "Label",
+          "caption": "Für Zeiträume > Tag werden zuerst aufsummierte Tages-kWh, sonst Gesamtzähler-Differenz verwendet."
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
       "caption": "Darstellung je Zeitraum",
       "items": [
         {
