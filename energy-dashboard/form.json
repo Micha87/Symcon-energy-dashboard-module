@@ -415,6 +415,21 @@
     },
     {
       "type": "ExpansionPanel",
+      "caption": "Peak-Werte (optional)",
+      "items": [
+        {
+          "type": "CheckBox",
+          "name": "ShowPeakValues",
+          "caption": "Peak-Werte anzeigen"
+        },
+        {
+          "type": "Label",
+          "caption": "Zeigt Max PV, Max Verbrauch und Max Netzbezug für den gewählten Zeitraum."
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
       "caption": "Darstellung je Zeitraum",
       "items": [
         {
@@ -598,11 +613,6 @@
     {
       "type": "Label",
       "caption": "WebFront-Steuerung über Variablen: Intervall, Referenzdatum, Zurück, Heute, Vor."
-    },
-    {
-      "type": "Button",
-      "caption": "Design auf Standard setzen",
-      "onClick": "EDB_ResetThemeDefaults($id);"
     }
   ],
   "status": [
