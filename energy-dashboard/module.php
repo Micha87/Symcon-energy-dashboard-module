@@ -61,6 +61,8 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('PvTargetDayID', 0);
         $this->RegisterPropertyInteger('PvTargetTotalID', 0);
         $this->RegisterPropertyBoolean('ShowPeakValues', false);
+        $this->RegisterPropertyBoolean('ShowPeaksInChart', false);
+        $this->RegisterPropertyBoolean('ShowPeakLabelsInChart', true);
 
         $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
@@ -834,6 +836,42 @@ class EnergyDashboard extends IPSModule
     }
 
 
+
+
+    private function GetChartPeakPoints(array $data): array
+    {
+        $result = [
+            'pv' => ['index' => null, 'value' => 0.0, 'label' => 'PV'],
+            'load' => ['index' => null, 'value' => 0.0, 'label' => 'Verbrauch'],
+            'grid' => ['index' => null, 'value' => 0.0, 'label' => 'Netz']
+        ];
+
+        if (!$this->ReadPropertyBoolean('ShowPeaksInChart')) {
+            return $result;
+        }
+
+        foreach (['pv' => 'pv', 'load' => 'load', 'grid' => 'grid'] as $target => $key) {
+            if (!isset($data[$key]) || !is_array($data[$key]) || count($data[$key]) === 0) {
+                continue;
+            }
+
+            $values = array_map('floatval', $data[$key]);
+            if ($target === 'grid') {
+                $values = array_map(function ($v) {
+                    return max(0.0, (float) $v);
+                }, $values);
+            }
+
+            $maxVal = max($values);
+            $index = array_search($maxVal, $values, true);
+            if ($index !== false) {
+                $result[$target]['index'] = (int) $index;
+                $result[$target]['value'] = round((float) $maxVal, 2);
+            }
+        }
+
+        return $result;
+    }
 
     private function GetPeakValues(int $archiveID, int $rangeStart, int $rangeEnd): array
     {
@@ -1707,13 +1745,19 @@ class EnergyDashboard extends IPSModule
         $chartType = $data['chartType'] ?? 'line';
         $json = json_encode(['labels' => $data['labels'], 'pv' => $data['pv'], 'grid' => $data['grid'], 'load' => $data['load'], 'battery' => $data['battery'], 'soc' => $data['soc'] ?? []], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $peakJson = json_encode($this->GetChartPeakPoints($data), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $showPeakLabels = $this->ReadPropertyBoolean('ShowPeakLabelsInChart') ? 'true' : 'false';
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
         $labelEsc = htmlspecialchars($label);
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
             . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:' . $theme['muted'] . ';margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
             . '<div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-            . '<script>(function(){const d=' . $json . ';const theme=' . $themeJson . ';new Chart(document.getElementById("edbSourceChart"),{type:"' . $chartType . '",data:{labels:d.labels,datasets:[{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:.25,pointRadius:0,borderWidth:2},{label:"Netz",data:d.grid,borderColor:theme.grid,backgroundColor:theme.gridFill,fill:false,tension:.2,pointRadius:0,borderWidth:2},{label:"Verbrauch",data:d.load,borderColor:"#000000",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},{label:"Batterie",data:d.battery,borderColor:theme.battery,backgroundColor:theme.batteryFill,tension:.15,pointRadius:0,borderWidth:2.5}].concat((Array.isArray(d.soc)&&d.soc.length>0)?[{label:"SoC",data:d.soc,borderColor:theme.soc,backgroundColor:theme.socFill,borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"}]:[])},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}}},scales:{y:{ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"kW",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}}});})();</script>'
+            . '<script>(function(){const d=' . $json . ';const theme=' . $themeJson . ';const peaks=' . $peakJson . ';const showPeakLabels=' . $showPeakLabels . ';'
+            . 'const datasets=[{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:.25,pointRadius:0,borderWidth:2},{label:"Netz",data:d.grid,borderColor:theme.grid,backgroundColor:theme.gridFill,fill:false,tension:.2,pointRadius:0,borderWidth:2},{label:"Verbrauch",data:d.load,borderColor:"#000000",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},{label:"Batterie",data:d.battery,borderColor:theme.battery,backgroundColor:theme.batteryFill,tension:.15,pointRadius:0,borderWidth:2.5}];'
+            . 'if(Array.isArray(d.soc)&&d.soc.length>0){datasets.push({label:"SoC",data:d.soc,borderColor:theme.soc,backgroundColor:theme.socFill,borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"});}'
+            . 'const peakPlugin={id:"peakPlugin",afterDatasetsDraw(chart){if(!peaks){return;}const ctx=chart.ctx;ctx.save();function drawPeak(datasetIndex, peak, color){if(!peak||peak.index===null||peak.index===undefined){return;}const meta=chart.getDatasetMeta(datasetIndex);if(!meta||!meta.data||!meta.data[peak.index]){return;}const point=meta.data[peak.index];const x=point.x;const y=point.y;ctx.beginPath();ctx.arc(x,y,5,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle="#ffffff";ctx.stroke();if(showPeakLabels){ctx.font="12px Arial";ctx.fillStyle=color;ctx.textAlign="left";ctx.textBaseline="bottom";ctx.fillText(peak.label+": "+Number(peak.value).toFixed(2)+" kW",x+8,y-8);}}drawPeak(0,peaks.pv,theme.pv);drawPeak(1,peaks.grid,theme.grid);drawPeak(2,peaks.load,theme.house);ctx.restore();}};'
+            . 'new Chart(document.getElementById("edbSourceChart"),{type:"' . $chartType . '",data:{labels:d.labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}}},scales:{y:{ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"' . $unit . '",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}},plugins:[peakPlugin]});})();</script>'
             . '</div>';
     }
 
