@@ -1457,15 +1457,17 @@ class EnergyDashboard extends IPSModule
                 . $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %');
         }
 
-        $peakHtml = '';
-        if ($this->ReadPropertyBoolean('ShowPeakValues')) {
-            $combinedHtml = '';
-        if ($this->ReadPropertyBoolean('ShowPeakValues')) {
+        $combinedHtml = '';
+
+        if ($this->ReadPropertyBoolean('ShowPeakValues') || (($targetComparison['enabled'] ?? false) && ((float) ($targetComparison['target'] ?? 0.0)) > 0)) {
             $combinedHtml = '<div class="edb-section" style="margin-top:12px;">Peak & Soll/Ist</div>'
-                . '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
-                . $this->OverviewBox('Max PV', $this->Fmt((float) ($peakValues['pv'] ?? 0.0)) . ' kW')
-                . $this->OverviewBox('Max Verbrauch', $this->Fmt((float) ($peakValues['load'] ?? 0.0)) . ' kW')
-                . $this->OverviewBox('Max Netzbezug', $this->Fmt((float) ($peakValues['gridImport'] ?? 0.0)) . ' kW');
+                . '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+
+            if ($this->ReadPropertyBoolean('ShowPeakValues')) {
+                $combinedHtml .= $this->OverviewBox('Max PV', $this->Fmt((float) ($peakValues['pv'] ?? 0.0)) . ' kW')
+                    . $this->OverviewBox('Max Verbrauch', $this->Fmt((float) ($peakValues['load'] ?? 0.0)) . ' kW')
+                    . $this->OverviewBox('Max Netzbezug', $this->Fmt((float) ($peakValues['gridImport'] ?? 0.0)) . ' kW');
+            }
 
             if (($targetComparison['enabled'] ?? false) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
                 $combinedHtml .= $this->OverviewBox('Soll', $this->Fmt((float) $targetComparison['target']) . ' kWh')
@@ -1475,17 +1477,6 @@ class EnergyDashboard extends IPSModule
             }
 
             $combinedHtml .= '</div>';
-        } else {
-            $combinedHtml = $targetHtml;
-        }
-        if (($targetComparison['enabled'] ?? false) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
-            $targetHtml = '<div class="edb-section" style="margin-top:12px;">Soll / Ist Vergleich</div>'
-                . '<div class="edb-grid">'
-                . $this->OverviewBox('Soll', $this->Fmt((float) $targetComparison['target']) . ' kWh')
-                . $this->OverviewBox('Ist', $this->Fmt((float) $targetComparison['actual']) . ' kWh')
-                . $this->OverviewBox('Abweichung', $this->Fmt((float) $targetComparison['delta']) . ' kWh')
-                . $this->OverviewBox('Erfüllung', $this->Fmt((float) $targetComparison['percent']) . ' %')
-                . '</div>';
         }
 
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
