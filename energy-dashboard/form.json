@@ -314,6 +314,32 @@
     },
     {
       "type": "ExpansionPanel",
+      "caption": "Sankey (optional)",
+      "items": [
+        {
+          "type": "CheckBox",
+          "name": "EnableSankey",
+          "caption": "Sankey anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "SankeyUseLiveWatts",
+          "caption": "In Tagesansicht Live-Werte in W statt kWh verwenden"
+        },
+        {
+          "type": "CheckBox",
+          "name": "SankeyShowPercentages",
+          "caption": "Tooltips mit Anteilen (%) anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "SankeyAnimate",
+          "caption": "Animation bei Updates aktivieren"
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
       "caption": "Darstellung je Zeitraum",
       "items": [
         {
