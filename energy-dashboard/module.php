@@ -7,7 +7,7 @@ class EnergyDashboard extends IPSModule
     private const IDENT_OVERVIEW = 'OverviewHTML';
     private const IDENT_SOURCES  = 'SourcesHTML';
     private const IDENT_USAGE    = 'UsageHTML';
-    private const IDENT_NAV      = 'NavigationHTML';
+   // private const IDENT_NAV      = 'NavigationHTML';
 
     private const IDENT_PERIOD_MODE    = 'WF_PeriodMode';
     private const IDENT_REFERENCE_DATE = 'WF_ReferenceDate';
@@ -1229,85 +1229,6 @@ class EnergyDashboard extends IPSModule
             . '</div>';
     }
 
-    private function GetNavigationHtml(string $label, bool $isCurrentPeriod): string
-{
-    $modeMap = [
-        'day' => 'Tag',
-        'week' => 'Woche',
-        'month' => 'Monat',
-        'year' => 'Jahr'
-    ];
-
-    $mode = $modeMap[$this->ReadAttributeString('PeriodMode')] ?? 'Tag';
-    $state = $isCurrentPeriod ? 'Aktuell' : 'Historisch';
-
-    $self = $this->InstanceID;
-
-    return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-        . '<style>
-            .edb-nav {
-                display:flex;
-                align-items:center;
-                justify-content:space-between;
-                gap:10px;
-                background:#1f1f1f;
-                color:#fff;
-                border-radius:16px;
-                padding:12px 18px;
-                box-shadow:0 2px 8px rgba(0,0,0,.25)
-            }
-            .edb-left {
-                display:flex;
-                align-items:center;
-                gap:12px;
-                font-weight:700;
-                font-size:18px;
-            }
-            .edb-right {
-                display:flex;
-                align-items:center;
-                gap:10px;
-            }
-            .edb-chip {
-                padding:8px 14px;
-                border-radius:999px;
-                background:#0b7db7;
-                color:#fff;
-                font-weight:700;
-                cursor:pointer;
-            }
-            .edb-icon {
-                width:30px;
-                height:30px;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                cursor:pointer;
-                font-size:22px;
-            }
-            .edb-sub {
-                font-size:12px;
-                opacity:.8;
-            }
-        </style>'
-
-        . '<div class="edb-nav">'
-        . '<div class="edb-left">'
-        . '<div>📅</div>'
-        . '<div>
-            <div>' . htmlspecialchars($label) . '</div>
-            <div class="edb-sub">' . $mode . ' · ' . $state . '</div>
-           </div>'
-        . '</div>'
-
-        . '<div class="edb-right">'
-        . '<a class="edb-chip" href="javascript:requestAction(' . $self . ', \'NavPresetToday\', 1);">Jetzt</a>'
-        . '<a class="edb-icon" href="javascript:requestAction(' . $self . ', \'NavPrev\', 1);">‹</a>'
-        . '<a class="edb-icon" href="javascript:requestAction(' . $self . ', \'NavNext\', 1);">›</a>'
-        . '</div>'
-
-        . '</div></div>';
-}
     private function Fmt(float $value): string
     {
         return number_format($value, 2, ',', '.');
