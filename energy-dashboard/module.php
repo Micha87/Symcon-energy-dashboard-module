@@ -48,6 +48,11 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('BatteryChargeEnergyTotalID', 0);
         $this->RegisterPropertyInteger('BatteryDischargeEnergyTotalID', 0);
 
+        $this->RegisterPropertyString('BatteryContentMode', 'none');
+        $this->RegisterPropertyInteger('BatterySocID', 0);
+        $this->RegisterPropertyInteger('BatteryContentKwhID', 0);
+        $this->RegisterPropertyString('BatteryUsableCapacityKwh', '0');
+
         $this->RegisterPropertyString('ViewModeWeekSources', 'hours');
         $this->RegisterPropertyString('ViewModeWeekUsage', 'hours');
         $this->RegisterPropertyString('ViewModeMonthSources', 'days');
@@ -363,18 +368,18 @@ class EnergyDashboard extends IPSModule
             if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
                 $dayValues = $this->ReadHistoricalDayEnergy($archiveID, $rangeStart);
                 if ($dayValues !== null) {
-                    return $this->FinalizeTotals($dayValues);
+                    return $this->FinalizeTotals($dayValues, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, strtotime('+1 day', $rangeStart)));
                 }
             }
 
             if ($this->ReadPropertyBoolean('UseHistoricalCounterDiff')) {
                 $counterValues = $this->ReadHistoricalCounterDiff($archiveID, $rangeStart, strtotime('+1 day', $rangeStart));
                 if ($counterValues !== null) {
-                    return $this->FinalizeTotals($counterValues);
+                    return $this->FinalizeTotals($counterValues, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, strtotime('+1 day', $rangeStart)));
                 }
             }
 
-            return $this->FinalizeTotals($totals);
+            return $this->FinalizeTotals($totals, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd));
         }
 
         $sum = [
@@ -397,7 +402,7 @@ class EnergyDashboard extends IPSModule
             $sum[$k] = round($v, 2);
         }
 
-        return $this->FinalizeTotals($sum);
+        return $this->FinalizeTotals($sum, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd));
     }
 
     private function ResolveSingleDayTotals(int $archiveID, int $dayStart): array
@@ -578,7 +583,62 @@ class EnergyDashboard extends IPSModule
         return $endValue - $startValue;
     }
 
-    private function FinalizeTotals(array $totals): array
+
+    private function GetBatteryContentDeltaKwh(int $archiveID, int $rangeStart, int $rangeEnd): float
+    {
+        $mode = $this->ReadPropertyString('BatteryContentMode');
+
+        if ($mode === 'kwh') {
+            $id = $this->ReadPropertyInteger('BatteryContentKwhID');
+            if ($this->IsValidVar($id)) {
+                $start = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
+                $end = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
+                if ($start !== null && $end !== null) {
+                    return round($end - $start, 3);
+                }
+            }
+        }
+
+        if ($mode === 'soc') {
+            $id = $this->ReadPropertyInteger('BatterySocID');
+            $usable = (float) str_replace(',', '.', $this->ReadPropertyString('BatteryUsableCapacityKwh'));
+            if ($this->IsValidVar($id) && $usable > 0) {
+                $startSoc = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
+                $endSoc = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
+                if ($startSoc !== null && $endSoc !== null) {
+                    $startKwh = ($startSoc / 100.0) * $usable;
+                    $endKwh = ($endSoc / 100.0) * $usable;
+                    return round($endKwh - $startKwh, 3);
+                }
+            }
+        }
+
+        return 0.0;
+    }
+
+    private function ReadLoggedValueAtOrBefore(int $archiveID, int $varID, int $timestamp): ?float
+    {
+        $rows = @AC_GetLoggedValues($archiveID, $varID, $timestamp - 7 * 86400, $timestamp + 60, 0);
+        if (!is_array($rows) || count($rows) === 0) {
+            return null;
+        }
+
+        $value = null;
+        foreach ($rows as $row) {
+            $ts = (int) $row['TimeStamp'];
+            if ($ts <= $timestamp && isset($row['Value'])) {
+                $value = (float) $row['Value'];
+            }
+        }
+
+        if ($value === null && isset($rows[0]['Value'])) {
+            $value = (float) $rows[0]['Value'];
+        }
+
+        return $value;
+    }
+
+    private function FinalizeTotals(array $totals, float $batteryDeltaKwh = 0.0): array
     {
         $totals = array_merge([
             'pv' => 0.0,
@@ -596,6 +656,12 @@ class EnergyDashboard extends IPSModule
             : 0.0;
         $totals['batteryEfficiency'] = $totals['batteryCharge'] > 0
             ? round(min(100.0, max(0.0, ($totals['batteryDischarge'] / $totals['batteryCharge']) * 100.0)), 1)
+            : 0.0;
+
+        $correctedOutput = $totals['batteryDischarge'] + $batteryDeltaKwh;
+        $totals['batteryDeltaKwh'] = round($batteryDeltaKwh, 2);
+        $totals['batteryEfficiencyAdj'] = $totals['batteryCharge'] > 0
+            ? round(min(100.0, max(0.0, ($correctedOutput / $totals['batteryCharge']) * 100.0)), 1)
             : 0.0;
 
         return $totals;
@@ -1115,7 +1181,9 @@ class EnergyDashboard extends IPSModule
                 . '<div class="edb-grid">'
                 . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
                 . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
+                . $this->OverviewBox('Δ Batt.-Inhalt', $this->Fmt((float) $t['batteryDeltaKwh']) . ' kWh')
                 . $this->OverviewBox('Wirkungsgrad', $this->Fmt((float) $t['batteryEfficiency']) . ' %')
+                . $this->OverviewBox('SoC-bereinigt', $this->Fmt((float) $t['batteryEfficiencyAdj']) . ' %')
                 . '</div>'
                 . '</div>'
 
