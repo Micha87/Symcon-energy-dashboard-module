@@ -626,14 +626,13 @@ class EnergyDashboard extends IPSModule
             return 0.0;
         }
 
-        $isToday = date('Y-m-d', $rangeStart) === date('Y-m-d');
         $start = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
         if ($start === null) {
             $start = $this->ReadLoggedValueAtOrAfter($archiveID, $id, $rangeStart);
         }
 
-        $end = $isToday ? (float) GetValue($id) : $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
-        if ($end === null && !$isToday) {
+        $end = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
+        if ($end === null) {
             $end = $this->ReadLoggedValueAtOrAfter($archiveID, $id, $rangeEnd - 3600);
         }
 
@@ -646,47 +645,8 @@ class EnergyDashboard extends IPSModule
 
     private function GetBatteryContentDeltaKwh(int $archiveID, int $rangeStart, int $rangeEnd): float
     {
-        $mode = $this->ReadPropertyString('BatteryContentMode');
-        $isToday = date('Y-m-d', $rangeStart) === date('Y-m-d');
-
-        if ($mode === 'kwh') {
-            $id = $this->ReadPropertyInteger('BatteryContentKwhID');
-            if ($this->IsValidVar($id)) {
-                $start = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
-                if ($start === null) {
-                    $start = $this->ReadLoggedValueAtOrAfter($archiveID, $id, $rangeStart);
-                }
-                $end = $isToday ? (float) GetValue($id) : $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
-                if ($end === null && !$isToday) {
-                    $end = $this->ReadLoggedValueAtOrAfter($archiveID, $id, $rangeEnd - 3600);
-                }
-                if ($start !== null && $end !== null) {
-                    return round($end - $start, 3);
-                }
-            }
-        }
-
-        if ($mode === 'soc') {
-            $id = $this->ReadPropertyInteger('BatterySocID');
-            $usable = (float) str_replace(',', '.', $this->ReadPropertyString('BatteryUsableCapacityKwh'));
-            if ($this->IsValidVar($id) && $usable > 0) {
-                $startSoc = $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeStart);
-                if ($startSoc === null) {
-                    $startSoc = $this->ReadLoggedValueAtOrAfter($archiveID, $id, $rangeStart);
-                }
-                $endSoc = $isToday ? (float) GetValue($id) : $this->ReadLoggedValueAtOrBefore($archiveID, $id, $rangeEnd);
-                if ($endSoc === null && !$isToday) {
-                    $endSoc = $this->ReadLoggedValueAtOrAfter($archiveID, $id, $rangeEnd - 3600);
-                }
-                if ($startSoc !== null && $endSoc !== null) {
-                    $startKwh = ($startSoc / 100.0) * $usable;
-                    $endKwh = ($endSoc / 100.0) * $usable;
-                    return round($endKwh - $startKwh, 3);
-                }
-            }
-        }
-
-        return 0.0;
+        $dayTotals = $this->ResolveSingleDayTotals($archiveID, strtotime(date('Y-m-d 00:00:00', $rangeStart)));
+        return round((float) $dayTotals['batteryCharge'] - (float) $dayTotals['batteryDischarge'], 3);
     }
 
     private function ReadLoggedValueAtOrBefore(int $archiveID, int $varID, int $timestamp): ?float
