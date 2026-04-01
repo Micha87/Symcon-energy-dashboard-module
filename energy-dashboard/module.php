@@ -1685,24 +1685,21 @@ class EnergyDashboard extends IPSModule
         $battCharge = max(0.0, -$battery);
         $battDischarge = max(0.0, $battery);
 
-        $pvToLoad = min($pv, $load);
-        $remainingLoad = max(0.0, $load - $pvToLoad);
+        // Lokale Lastdeckung zuerst aus "Last ohne Netz"
+        $localToLoad = max(0.0, $load - $gridImport);
+        $batteryToLoad = min($battDischarge, $localToLoad);
+        $pvToLoad = max(0.0, $localToLoad - $batteryToLoad);
 
-        $batteryToLoad = min($battDischarge, $remainingLoad);
-        $remainingLoad = max(0.0, $remainingLoad - $batteryToLoad);
+        // Lokaler PV-Verbrauch = PV ohne Export
+        $pvSelfConsumption = max(0.0, $pv - $gridExport);
+        $pvToBattery = min($battCharge, max(0.0, $pvSelfConsumption - $pvToLoad));
+        $gridToBattery = max(0.0, $battCharge - $pvToBattery);
 
-        $gridToLoad = min($gridImport, $remainingLoad);
-        $remainingGridImport = max(0.0, $gridImport - $gridToLoad);
+        // Export aufteilen
+        $pvToGrid = min($gridExport, max(0.0, $pv - $pvToLoad - $pvToBattery));
+        $batteryToGrid = max(0.0, $gridExport - $pvToGrid);
 
-        $pvExcess = max(0.0, $pv - $pvToLoad);
-        $pvToBattery = min($battCharge, $pvExcess);
-        $remainingCharge = max(0.0, $battCharge - $pvToBattery);
-
-        $gridToBattery = min($remainingGridImport, $remainingCharge);
-
-        $remainingBatteryDischarge = max(0.0, $battDischarge - $batteryToLoad);
-        $batteryToGrid = min($gridExport, $remainingBatteryDischarge);
-        $pvToGrid = max(0.0, $gridExport - $batteryToGrid);
+        $gridToLoad = $gridImport;
 
         return [
             ['PV', 'Haus', round($pvToLoad, 3)],
@@ -1740,24 +1737,21 @@ class EnergyDashboard extends IPSModule
         $battCharge = max(0.0, (float) ($t['batteryCharge'] ?? 0.0));
         $battDischarge = max(0.0, (float) ($t['batteryDischarge'] ?? 0.0));
 
-        $pvToLoad = min($pv, $load);
-        $remainingLoad = max(0.0, $load - $pvToLoad);
+        // Lokale Lastdeckung zuerst aus "Last ohne Netz"
+        $localToLoad = max(0.0, $load - $gridImport);
+        $batteryToLoad = min($battDischarge, $localToLoad);
+        $pvToLoad = max(0.0, $localToLoad - $batteryToLoad);
 
-        $batteryToLoad = min($battDischarge, $remainingLoad);
-        $remainingLoad = max(0.0, $remainingLoad - $batteryToLoad);
+        // Selbstverbrauch = PV lokal genutzt (Haus + Batterie)
+        $pvSelfConsumption = max(0.0, $pv - $gridExport);
+        $pvToBattery = min($battCharge, max(0.0, $pvSelfConsumption - $pvToLoad));
+        $gridToBattery = max(0.0, $battCharge - $pvToBattery);
 
-        $gridToLoad = min($gridImport, $remainingLoad);
-        $remainingGridImport = max(0.0, $gridImport - $gridToLoad);
+        // Export aufteilen: bevorzugt PV-Export, Rest Batterie-Export
+        $pvToGrid = min($gridExport, max(0.0, $pv - $pvToLoad - $pvToBattery));
+        $batteryToGrid = max(0.0, $gridExport - $pvToGrid);
 
-        $pvExcess = max(0.0, $pv - $pvToLoad);
-        $pvToBattery = min($battCharge, $pvExcess);
-        $remainingCharge = max(0.0, $battCharge - $pvToBattery);
-
-        $gridToBattery = min($remainingGridImport, $remainingCharge);
-
-        $remainingBatteryDischarge = max(0.0, $battDischarge - $batteryToLoad);
-        $batteryToGrid = min($gridExport, $remainingBatteryDischarge);
-        $pvToGrid = max(0.0, $gridExport - $batteryToGrid);
+        $gridToLoad = $gridImport;
 
         return [
             ['PV', 'Haus', round($pvToLoad, 2)],
