@@ -1964,7 +1964,8 @@ class EnergyDashboard extends IPSModule
         $json = json_encode(['labels' => $data['labels'], 'pv' => $data['pv'], 'grid' => $data['grid'], 'load' => $data['load'], 'battery' => $data['battery'], 'soc' => $data['soc'] ?? []], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         [$peakStart, $peakEnd] = [$this->GetSelectedRange()[0], $this->GetSelectedRange()[1]];
-        $peakJson = json_encode($this->BuildChartDisplayPeakMeta($chartPayload), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $peakSource = ['labels' => $data['labels'] ?? [], 'pv' => $data['pv'] ?? [], 'grid' => $data['grid'] ?? [], 'load' => $data['load'] ?? [], 'battery' => $data['battery'] ?? [], 'soc' => $data['soc'] ?? [], 'timestamps' => $data['timestamps'] ?? []];
+        $peakJson = json_encode($this->BuildChartDisplayPeakMeta($peakSource), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $showPeakLabels = $this->ReadPropertyBoolean('ShowPeakLabelsInChart') ? 'true' : 'false';
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
         $labelEsc = htmlspecialchars($label);
