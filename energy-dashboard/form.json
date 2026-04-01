@@ -3,12 +3,14 @@
     {
       "type": "ValidationTextBox",
       "name": "Title",
-      "caption": "Titel"
+      "caption": "Titel",
+      "items": []
     },
     {
       "type": "CheckBox",
       "name": "CreateWebFrontControls",
-      "caption": "Bedienvariablen für WebFront anlegen"
+      "caption": "Bedienvariablen für WebFront anlegen",
+      "items": []
     },
     {
       "type": "SelectVariable",
@@ -18,12 +20,14 @@
         1,
         2
       ],
-      "width": "420px"
+      "width": "420px",
+      "items": []
     },
     {
       "type": "CheckBox",
       "name": "InvertPv",
-      "caption": "PV-Vorzeichen invertieren"
+      "caption": "PV-Vorzeichen invertieren",
+      "items": []
     },
     {
       "type": "SelectVariable",
@@ -33,12 +37,14 @@
         1,
         2
       ],
-      "width": "420px"
+      "width": "420px",
+      "items": []
     },
     {
       "type": "CheckBox",
       "name": "InvertGrid",
-      "caption": "Netz-Vorzeichen invertieren"
+      "caption": "Netz-Vorzeichen invertieren",
+      "items": []
     },
     {
       "type": "SelectVariable",
@@ -48,12 +54,14 @@
         1,
         2
       ],
-      "width": "420px"
+      "width": "420px",
+      "items": []
     },
     {
       "type": "CheckBox",
       "name": "InvertLoad",
-      "caption": "Verbrauch-Vorzeichen invertieren"
+      "caption": "Verbrauch-Vorzeichen invertieren",
+      "items": []
     },
     {
       "type": "SelectVariable",
@@ -63,12 +71,14 @@
         1,
         2
       ],
-      "width": "420px"
+      "width": "420px",
+      "items": []
     },
     {
       "type": "CheckBox",
       "name": "InvertBattery",
-      "caption": "Batterie-Vorzeichen invertieren"
+      "caption": "Batterie-Vorzeichen invertieren",
+      "items": []
     },
     {
       "type": "ExpansionPanel",
@@ -578,7 +588,8 @@
     {
       "type": "NumberSpinner",
       "name": "ArchiveControlID",
-      "caption": "Archivsteuerung-ID (0 = automatisch suchen)"
+      "caption": "Archivsteuerung-ID (0 = automatisch suchen)",
+      "items": []
     },
     {
       "type": "Select",
@@ -597,7 +608,8 @@
           "caption": "1 Minute",
           "value": 6
         }
-      ]
+      ],
+      "items": []
     },
     {
       "type": "Select",
@@ -616,22 +628,26 @@
           "caption": "1 Minute",
           "value": 6
         }
-      ]
+      ],
+      "items": []
     },
     {
       "type": "NumberSpinner",
       "name": "RefreshSeconds",
-      "caption": "Aktualisierung alle x Sekunden"
+      "caption": "Aktualisierung alle x Sekunden",
+      "items": []
     },
     {
       "type": "NumberSpinner",
       "name": "MaxSourcePoints",
-      "caption": "Max. Punkte Stromquellen-Chart"
+      "caption": "Max. Punkte Stromquellen-Chart",
+      "items": []
     },
     {
       "type": "NumberSpinner",
       "name": "MaxUsagePoints",
-      "caption": "Max. Punkte Stromnutzung-Chart"
+      "caption": "Max. Punkte Stromnutzung-Chart",
+      "items": []
     }
   ],
   "actions": [
