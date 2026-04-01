@@ -907,27 +907,130 @@ class EnergyDashboard extends IPSModule
 
     private function GetPeakValues(int $archiveID, int $rangeStart, int $rangeEnd): array
     {
-        $empty = [
-            'pv' => ['value' => 0.0, 'timestamp' => 0],
-            'load' => ['value' => 0.0, 'timestamp' => 0],
-            'gridImport' => ['value' => 0.0, 'timestamp' => 0],
-            'gridExport' => ['value' => 0.0, 'timestamp' => 0],
-            'batteryCharge' => ['value' => 0.0, 'timestamp' => 0],
-            'batteryDischarge' => ['value' => 0.0, 'timestamp' => 0]
+        $result = [
+            'pv' => 0.0,
+            'load' => 0.0,
+            'gridImport' => 0.0,
+            'gridExport' => 0.0,
+            'batteryCharge' => 0.0,
+            'batteryDischarge' => 0.0,
+            'pvTime' => '',
+            'loadTime' => '',
+            'gridImportTime' => '',
+            'gridExportTime' => '',
+            'batteryChargeTime' => '',
+            'batteryDischargeTime' => ''
         ];
+
         // Peak-Werte werden aus den konfigurierten Leistungswerten (Watt) berechnet.
         if (!$this->ReadPropertyBoolean('ShowPeakValues')) {
-            return $empty;
+            return $result;
         }
 
-        return [
-            'pv' => $this->GetArchiveExtremeKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $rangeStart, $rangeEnd, $this->ReadPropertyBoolean('InvertPv'), 'max'),
-            'load' => $this->GetArchiveExtremeKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $rangeStart, $rangeEnd, $this->ReadPropertyBoolean('InvertLoad'), 'max'),
-            'gridImport' => $this->GetArchiveExtremeKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $rangeStart, $rangeEnd, $this->ReadPropertyBoolean('InvertGrid'), 'import'),
-            'gridExport' => $this->GetArchiveExtremeKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $rangeStart, $rangeEnd, $this->ReadPropertyBoolean('InvertGrid'), 'export'),
-            'batteryCharge' => $this->GetArchiveExtremeKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $rangeStart, $rangeEnd, $this->ReadPropertyBoolean('InvertBattery'), 'charge'),
-            'batteryDischarge' => $this->GetArchiveExtremeKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $rangeStart, $rangeEnd, $this->ReadPropertyBoolean('InvertBattery'), 'discharge')
-        ];
+        $mode = $this->ReadAttributeString('PeriodMode');
+        $showTimestamp = $this->ReadPropertyBoolean('ShowPeakTimestamps') && in_array($mode, ['day', 'week'], true);
+
+        $getPeak = function (int $varID, bool $invert, bool $wantMin = false, bool $positiveOnly = false) use ($archiveID, $rangeStart, $rangeEnd): array {
+            if (!$this->IsValidVar($varID)) {
+                return ['value' => 0.0, 'ts' => 0];
+            }
+
+            $rangeSeconds = max(1, $rangeEnd - $rangeStart);
+            $useLogged = $rangeSeconds <= 14 * 86400;
+
+            $bestVal = $wantMin ? INF : -INF;
+            $bestTs = 0;
+
+            if ($useLogged) {
+                $rows = @AC_GetLoggedValues($archiveID, $varID, $rangeStart, $rangeEnd, 10000);
+                if (!is_array($rows)) {
+                    $rows = [];
+                }
+                foreach ($rows as $row) {
+                    if (!isset($row['Value'])) {
+                        continue;
+                    }
+                    $val = $this->ApplySign((float) $row['Value'], $invert);
+                    if ($positiveOnly) {
+                        $val = max(0.0, $val);
+                    }
+                    if ($wantMin) {
+                        if ($val < $bestVal) {
+                            $bestVal = $val;
+                            $bestTs = (int) $row['TimeStamp'];
+                        }
+                    } else {
+                        if ($val > $bestVal) {
+                            $bestVal = $val;
+                            $bestTs = (int) $row['TimeStamp'];
+                        }
+                    }
+                }
+            } else {
+                $aggregation = ($rangeSeconds > 120 * 86400) ? 2 : 1; // daily for very long, hourly otherwise
+                $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $rangeStart, $rangeEnd, 0);
+                if (!is_array($rows)) {
+                    $rows = [];
+                }
+                foreach ($rows as $row) {
+                    if ($wantMin) {
+                        $val = isset($row['Min']) ? (float) $row['Min'] : (isset($row['Avg']) ? (float) $row['Avg'] : null);
+                    } else {
+                        $val = isset($row['Max']) ? (float) $row['Max'] : (isset($row['Avg']) ? (float) $row['Avg'] : null);
+                    }
+                    if ($val === null) {
+                        continue;
+                    }
+                    $val = $this->ApplySign($val, $invert);
+                    if ($positiveOnly) {
+                        $val = max(0.0, $val);
+                    }
+                    if ($wantMin) {
+                        if ($val < $bestVal) {
+                            $bestVal = $val;
+                            $bestTs = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
+                        }
+                    } else {
+                        if ($val > $bestVal) {
+                            $bestVal = $val;
+                            $bestTs = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
+                        }
+                    }
+                }
+            }
+
+            if ($bestVal === INF || $bestVal === -INF) {
+                $bestVal = 0.0;
+                $bestTs = 0;
+            }
+
+            return ['value' => round($bestVal / 1000.0, 2), 'ts' => $bestTs];
+        };
+
+        $pv = $getPeak($this->ReadPropertyInteger('PvPowerID'), $this->ReadPropertyBoolean('InvertPv'), false, true);
+        $load = $getPeak($this->ReadPropertyInteger('LoadPowerID'), $this->ReadPropertyBoolean('InvertLoad'), false, true);
+        $gridImport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), false, true);
+        $gridExport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), true, false);
+        $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, false);
+        $batteryCharge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), true, false);
+
+        $result['pv'] = max(0.0, $pv['value']);
+        $result['load'] = max(0.0, $load['value']);
+        $result['gridImport'] = max(0.0, $gridImport['value']);
+        $result['gridExport'] = abs(min(0.0, $gridExport['value']));
+        $result['batteryDischarge'] = max(0.0, $batteryDischarge['value']);
+        $result['batteryCharge'] = abs(min(0.0, $batteryCharge['value']));
+
+        if ($showTimestamp) {
+            $result['pvTime'] = ($pv['ts'] > 0) ? date('d.m H:i', $pv['ts']) : '';
+            $result['loadTime'] = ($load['ts'] > 0) ? date('d.m H:i', $load['ts']) : '';
+            $result['gridImportTime'] = ($gridImport['ts'] > 0) ? date('d.m H:i', $gridImport['ts']) : '';
+            $result['gridExportTime'] = ($gridExport['ts'] > 0) ? date('d.m H:i', $gridExport['ts']) : '';
+            $result['batteryDischargeTime'] = ($batteryDischarge['ts'] > 0) ? date('d.m H:i', $batteryDischarge['ts']) : '';
+            $result['batteryChargeTime'] = ($batteryCharge['ts'] > 0) ? date('d.m H:i', $batteryCharge['ts']) : '';
+        }
+
+        return $result;
     }
 
     private function FormatPeakValue(array $peak): string
