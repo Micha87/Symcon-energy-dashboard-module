@@ -973,27 +973,6 @@ class EnergyDashboard extends IPSModule
     }
 
 
-        $mode = $this->ReadAttributeString('PeriodMode');
-        $aggregation = ($mode === 'day' || $mode === 'week') ? $this->ReadPropertyInteger('SourceAggregation') : 0;
-        $series = $this->BuildPowerSeries($archiveID, $rangeStart, $rangeEnd, $aggregation);
-
-        if (isset($series['pv']) && is_array($series['pv']) && count($series['pv']) > 0) {
-            $result['pv'] = round(max(array_map('floatval', $series['pv'])), 2);
-        }
-        if (isset($series['load']) && is_array($series['load']) && count($series['load']) > 0) {
-            $result['load'] = round(max(array_map('floatval', $series['load'])), 2);
-        }
-        if (isset($series['grid']) && is_array($series['grid']) && count($series['grid']) > 0) {
-            $gridVals = array_map(function ($v) {
-                return max(0.0, (float) $v);
-            }, $series['grid']);
-            if (count($gridVals) > 0) {
-                $result['gridImport'] = round(max($gridVals), 2);
-            }
-        }
-
-        return $result;
-    }
 
     private function GetTargetComparisonTotals(int $archiveID, int $rangeStart, int $rangeEnd, array $totals): array
     {
