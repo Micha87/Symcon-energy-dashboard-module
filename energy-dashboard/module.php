@@ -63,7 +63,7 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyBoolean('ShowPeakValues', false);
         $this->RegisterPropertyBoolean('ShowPeaksInChart', false);
         $this->RegisterPropertyBoolean('ShowPeakLabelsInChart', true);
-        $this->RegisterPropertyBoolean('ShowGlobalPeakOnly', true);
+        $this->RegisterPropertyBoolean('ShowGlobalPeakOnly', false);
 
         $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
@@ -877,7 +877,7 @@ class EnergyDashboard extends IPSModule
 
     private function GetRealPeakPoint(int $archiveID, int $varID, int $rangeStart, int $rangeEnd, bool $onlyPositive = false, bool $invert = false, bool $findMin = false): array
     {
-        $result = ['timestamp' => 0, 'value' => $findMin ? INF : 0.0];
+        $result = ['timestamp' => 0, 'value' => $findMin ? INF : -INF];
         if (!$this->IsValidVar($varID)) {
             return ['timestamp' => 0, 'value' => 0.0];
         }
@@ -911,43 +911,57 @@ class EnergyDashboard extends IPSModule
                 }
             }
         } else {
-            $aggregation = 1; // stündlich
-            if ($rangeSeconds > 120 * 86400) {
-                $aggregation = 2; // täglich
-            }
+            $aggregation = ($rangeSeconds > 120 * 86400) ? 2 : 1; // >120d täglich, sonst stündlich
             $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $rangeStart, $rangeEnd, 0);
             if (!is_array($rows)) {
                 $rows = [];
             }
             foreach ($rows as $row) {
-                if (!isset($row['Avg'])) {
-                    continue;
+                if ($findMin) {
+                    if (isset($row['Min'])) {
+                        $val = (float) $row['Min'];
+                    } elseif (isset($row['Avg'])) {
+                        $val = (float) $row['Avg'];
+                    } else {
+                        continue;
+                    }
+                } else {
+                    if (isset($row['Max'])) {
+                        $val = (float) $row['Max'];
+                    } elseif (isset($row['Avg'])) {
+                        $val = (float) $row['Avg'];
+                    } else {
+                        continue;
+                    }
                 }
-                $val = $this->ApplySign((float) $row['Avg'], $invert);
+
+                $val = $this->ApplySign($val, $invert);
                 if ($onlyPositive) {
                     $val = max(0.0, $val);
                 }
+
                 if ($findMin) {
                     if ($val < $result['value']) {
                         $result['value'] = $val;
-                        $result['timestamp'] = (int) $row['TimeStamp'];
+                        $result['timestamp'] = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
                     }
                 } else {
                     if ($val > $result['value']) {
                         $result['value'] = $val;
-                        $result['timestamp'] = (int) $row['TimeStamp'];
+                        $result['timestamp'] = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
                     }
                 }
             }
         }
 
-        if ($result['value'] === INF) {
+        if ($result['value'] === INF || $result['value'] === -INF) {
             $result['value'] = 0.0;
         }
 
         $result['value'] = round($result['value'] / 1000.0, 2);
         return $result;
     }
+
 
 
     private function BuildPeakMeta(int $archiveID, int $rangeStart, int $rangeEnd, array $chartData): array
