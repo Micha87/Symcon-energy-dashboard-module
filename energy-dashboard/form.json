@@ -432,46 +432,6 @@
           "caption": "Animation bei Updates aktivieren"
         },
         {
-          "type": "SelectVariable",
-          "name": "SankeyLivePvID",
-          "caption": "Live PV-Leistung (W, optional eigene Variable)",
-          "validVariableTypes": [
-            1,
-            2
-          ],
-          "width": "420px"
-        },
-        {
-          "type": "SelectVariable",
-          "name": "SankeyLiveGridID",
-          "caption": "Live Netzleistung (W, optional eigene Variable)",
-          "validVariableTypes": [
-            1,
-            2
-          ],
-          "width": "420px"
-        },
-        {
-          "type": "SelectVariable",
-          "name": "SankeyLiveLoadID",
-          "caption": "Live Verbrauch (W, optional eigene Variable)",
-          "validVariableTypes": [
-            1,
-            2
-          ],
-          "width": "420px"
-        },
-        {
-          "type": "SelectVariable",
-          "name": "SankeyLiveBatteryID",
-          "caption": "Live Batterie-Leistung (W, optional eigene Variable)",
-          "validVariableTypes": [
-            1,
-            2
-          ],
-          "width": "420px"
-        },
-        {
           "type": "NumberSpinner",
           "name": "SankeyLiveRefresh",
           "caption": "Live Sankey Aktualisierung (Sekunden)"
