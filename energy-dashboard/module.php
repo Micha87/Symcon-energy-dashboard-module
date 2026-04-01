@@ -949,26 +949,6 @@ class EnergyDashboard extends IPSModule
         return $result;
     }
 
-        $rows = @AC_GetLoggedValues($archiveID, $varID, $rangeStart, $rangeEnd, 0);
-        if (!is_array($rows) || count($rows) === 0) {
-            return $result;
-        }
-        foreach ($rows as $row) {
-            if (!isset($row['Value'])) {
-                continue;
-            }
-            $val = $this->ApplySign((float) $row['Value'], $invert);
-            if ($onlyPositive) {
-                $val = max(0.0, $val);
-            }
-            if ($val > $result['value']) {
-                $result['value'] = $val;
-                $result['timestamp'] = (int) $row['TimeStamp'];
-            }
-        }
-        $result['value'] = round($result['value'] / 1000.0, 2);
-        return $result;
-    }
 
     private function BuildPeakMeta(int $archiveID, int $rangeStart, int $rangeEnd, array $chartData): array
     {
