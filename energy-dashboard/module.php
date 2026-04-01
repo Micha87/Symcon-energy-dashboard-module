@@ -1706,24 +1706,33 @@ class EnergyDashboard extends IPSModule
         $battCharge = max(0.0, -$battery);
         $battDischarge = max(0.0, $battery);
 
-        $pvRemaining = max(0.0, $pv - $gridExport);
-        $pvToBattery = min($battCharge, $pvRemaining);
-        $pvRemaining -= $pvToBattery;
-
-        $pvToLoad = min($load, $pvRemaining);
+        $pvToLoad = min($pv, $load);
         $remainingLoad = max(0.0, $load - $pvToLoad);
 
         $batteryToLoad = min($battDischarge, $remainingLoad);
-        $remainingLoad -= $batteryToLoad;
+        $remainingLoad = max(0.0, $remainingLoad - $batteryToLoad);
 
         $gridToLoad = min($gridImport, $remainingLoad);
+        $remainingGridImport = max(0.0, $gridImport - $gridToLoad);
+
+        $pvExcess = max(0.0, $pv - $pvToLoad);
+        $pvToBattery = min($battCharge, $pvExcess);
+        $remainingCharge = max(0.0, $battCharge - $pvToBattery);
+
+        $gridToBattery = min($remainingGridImport, $remainingCharge);
+
+        $remainingBatteryDischarge = max(0.0, $battDischarge - $batteryToLoad);
+        $batteryToGrid = min($gridExport, $remainingBatteryDischarge);
+        $pvToGrid = max(0.0, $gridExport - $batteryToGrid);
 
         return [
             ['PV', 'Haus', round($pvToLoad, 3)],
             ['PV', 'Batterie', round($pvToBattery, 3)],
-            ['PV', 'Netz', round($gridExport, 3)],
+            ['PV', 'Netz', round($pvToGrid, 3)],
             ['Netz', 'Haus', round($gridToLoad, 3)],
-            ['Batterie', 'Haus', round($batteryToLoad, 3)]
+            ['Netz', 'Batterie', round($gridToBattery, 3)],
+            ['Batterie', 'Haus', round($batteryToLoad, 3)],
+            ['Batterie', 'Netz', round($batteryToGrid, 3)]
         ];
     }
 
@@ -1752,25 +1761,33 @@ class EnergyDashboard extends IPSModule
         $battCharge = max(0.0, (float) ($t['batteryCharge'] ?? 0.0));
         $battDischarge = max(0.0, (float) ($t['batteryDischarge'] ?? 0.0));
 
-        // Näherungsweise Verteilung für Sankey
-        $pvRemaining = max(0.0, $pv - $gridExport);
-        $pvToBattery = min($battCharge, $pvRemaining);
-        $pvRemaining -= $pvToBattery;
-
-        $pvToLoad = min($load, $pvRemaining);
+        $pvToLoad = min($pv, $load);
         $remainingLoad = max(0.0, $load - $pvToLoad);
 
         $batteryToLoad = min($battDischarge, $remainingLoad);
-        $remainingLoad -= $batteryToLoad;
+        $remainingLoad = max(0.0, $remainingLoad - $batteryToLoad);
 
         $gridToLoad = min($gridImport, $remainingLoad);
+        $remainingGridImport = max(0.0, $gridImport - $gridToLoad);
+
+        $pvExcess = max(0.0, $pv - $pvToLoad);
+        $pvToBattery = min($battCharge, $pvExcess);
+        $remainingCharge = max(0.0, $battCharge - $pvToBattery);
+
+        $gridToBattery = min($remainingGridImport, $remainingCharge);
+
+        $remainingBatteryDischarge = max(0.0, $battDischarge - $batteryToLoad);
+        $batteryToGrid = min($gridExport, $remainingBatteryDischarge);
+        $pvToGrid = max(0.0, $gridExport - $batteryToGrid);
 
         return [
             ['PV', 'Haus', round($pvToLoad, 2)],
             ['PV', 'Batterie', round($pvToBattery, 2)],
-            ['PV', 'Netz', round($gridExport, 2)],
+            ['PV', 'Netz', round($pvToGrid, 2)],
             ['Netz', 'Haus', round($gridToLoad, 2)],
-            ['Batterie', 'Haus', round($batteryToLoad, 2)]
+            ['Netz', 'Batterie', round($gridToBattery, 2)],
+            ['Batterie', 'Haus', round($batteryToLoad, 2)],
+            ['Batterie', 'Netz', round($batteryToGrid, 2)]
         ];
     }
 
