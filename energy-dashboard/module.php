@@ -1014,32 +1014,28 @@ class EnergyDashboard extends IPSModule
         $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, false);
         $batteryCharge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), true, false);
 
-        $result['pv'] = max(0.0, $pv['value']);
-        $result['load'] = max(0.0, $load['value']);
-        $result['gridImport'] = max(0.0, $gridImport['value']);
-        $result['gridExport'] = abs(min(0.0, $gridExport['value']));
-        $result['batteryDischarge'] = max(0.0, $batteryDischarge['value']);
-        $result['batteryCharge'] = abs(min(0.0, $batteryCharge['value']));
-
-        if ($showTimestamp) {
-            $result['pvTime'] = ($pv['ts'] > 0) ? date('d.m H:i', $pv['ts']) : '';
-            $result['loadTime'] = ($load['ts'] > 0) ? date('d.m H:i', $load['ts']) : '';
-            $result['gridImportTime'] = ($gridImport['ts'] > 0) ? date('d.m H:i', $gridImport['ts']) : '';
-            $result['gridExportTime'] = ($gridExport['ts'] > 0) ? date('d.m H:i', $gridExport['ts']) : '';
-            $result['batteryDischargeTime'] = ($batteryDischarge['ts'] > 0) ? date('d.m H:i', $batteryDischarge['ts']) : '';
-            $result['batteryChargeTime'] = ($batteryCharge['ts'] > 0) ? date('d.m H:i', $batteryCharge['ts']) : '';
-        }
+        $result['pv'] = ['value' => max(0.0, $pv['value']), 'timestamp' => $showTimestamp ? ($pv['ts'] ?? 0) : 0];
+        $result['load'] = ['value' => max(0.0, $load['value']), 'timestamp' => $showTimestamp ? ($load['ts'] ?? 0) : 0];
+        $result['gridImport'] = ['value' => max(0.0, $gridImport['value']), 'timestamp' => $showTimestamp ? ($gridImport['ts'] ?? 0) : 0];
+        $result['gridExport'] = ['value' => abs(min(0.0, $gridExport['value'])), 'timestamp' => $showTimestamp ? ($gridExport['ts'] ?? 0) : 0];
+        $result['batteryDischarge'] = ['value' => max(0.0, $batteryDischarge['value']), 'timestamp' => $showTimestamp ? ($batteryDischarge['ts'] ?? 0) : 0];
+        $result['batteryCharge'] = ['value' => abs(min(0.0, $batteryCharge['value'])), 'timestamp' => $showTimestamp ? ($batteryCharge['ts'] ?? 0) : 0];
 
         return $result;
     }
 
-    private function FormatPeakValue(array $peak): string
+    private function FormatPeakValue($peak): string
     {
-        $value = $this->Fmt((float) ($peak['value'] ?? 0.0)) . ' kW';
-        if ($this->ReadPropertyBoolean('ShowPeakTimestamps') && !empty($peak['timestamp'])) {
-            $value .= ' · ' . date('d.m H:i', (int)$peak['timestamp']);
+        if (is_array($peak)) {
+            $value = $this->Fmt((float) ($peak['value'] ?? 0.0)) . ' kW';
+            $timestamp = $peak['timestamp'] ?? ($peak['ts'] ?? 0);
+            if ($this->ReadPropertyBoolean('ShowPeakTimestamps') && !empty($timestamp)) {
+                $value .= ' · ' . date('d.m H:i', (int) $timestamp);
+            }
+            return $value;
         }
-        return $value;
+
+        return $this->Fmt((float) $peak) . ' kW';
     }
 
     private function GetTargetComparisonTotals(int $archiveID, int $rangeStart, int $rangeEnd, array $totals): array
