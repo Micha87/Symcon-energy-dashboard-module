@@ -8,6 +8,7 @@ class EnergyDashboard extends IPSModule
     private const IDENT_SOURCES  = 'SourcesHTML';
     private const IDENT_USAGE    = 'UsageHTML';
     private const IDENT_SANKEY   = 'SankeyHTML';
+    private const IDENT_SANKEY_LIVE = 'SankeyLiveHTML';
 
     private const IDENT_PERIOD_MODE    = 'WF_PeriodMode';
     private const IDENT_REFERENCE_DATE = 'WF_ReferenceDate';
@@ -60,6 +61,20 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('PvTargetDayID', 0);
         $this->RegisterPropertyInteger('PvTargetTotalID', 0);
 
+        $this->RegisterPropertyString('ThemePreset', 'custom');
+        $this->RegisterPropertyString('ThemeMode', 'light');
+                                                                                        
+        $this->RegisterPropertyBoolean('ShowSankeyPeriod', true);
+        $this->RegisterPropertyBoolean('ShowSankeyLive', true);
+        $this->RegisterPropertyBoolean('SankeyUseLiveWatts', true);
+        $this->RegisterPropertyInteger('SankeyLivePvID', 0);
+        $this->RegisterPropertyInteger('SankeyLiveGridID', 0);
+        $this->RegisterPropertyInteger('SankeyLiveLoadID', 0);
+        $this->RegisterPropertyInteger('SankeyLiveBatteryID', 0);
+        $this->RegisterPropertyInteger('SankeyLiveRefresh', 30);
+        $this->RegisterPropertyBoolean('SankeyShowPercentages', true);
+        $this->RegisterPropertyBoolean('SankeyAnimate', true);
+
         $this->RegisterPropertyString('ViewModeWeekSources', 'hours');
         $this->RegisterPropertyString('ViewModeWeekUsage', 'hours');
         $this->RegisterPropertyString('ViewModeMonthSources', 'days');
@@ -76,8 +91,16 @@ class EnergyDashboard extends IPSModule
 
         $this->RegisterAttributeString('PeriodMode', 'day');
         $this->RegisterAttributeInteger('ReferenceTimestamp', 0);
+        $this->RegisterAttributeString('LastAppliedThemePreset', '');
 
         $this->RegisterTimer(self::TIMER_REFRESH, 0, 'EDB_UpdateVisualization($_IPS["TARGET"]);');
+    }
+
+
+    public function ResetThemeDefaults(): void
+    {
+        IPS_SetProperty($this->InstanceID, 'ThemePreset', 'light');
+        IPS_ApplyChanges($this->InstanceID);
     }
 
     public function ApplyChanges()
@@ -87,7 +110,8 @@ class EnergyDashboard extends IPSModule
         $this->MaintainVariable(self::IDENT_OVERVIEW, 'Verbrauchsübersicht', VARIABLETYPE_STRING, '~HTMLBox', 0, true);
         $this->MaintainVariable(self::IDENT_SOURCES, 'Stromquellen', VARIABLETYPE_STRING, '~HTMLBox', 1, true);
         $this->MaintainVariable(self::IDENT_USAGE, 'Stromnutzung', VARIABLETYPE_STRING, '~HTMLBox', 2, true);
-        $this->MaintainVariable(self::IDENT_SANKEY, 'Energiefluss Sankey', VARIABLETYPE_STRING, '~HTMLBox', 3, true);
+        $this->MaintainVariable(self::IDENT_SANKEY, 'Energiefluss Sankey kWh', VARIABLETYPE_STRING, '~HTMLBox', 3, true);
+        $this->MaintainVariable(self::IDENT_SANKEY_LIVE, 'Energiefluss Sankey Live', VARIABLETYPE_STRING, '~HTMLBox', 4, true);
 
         if ($this->ReadPropertyBoolean('CreateWebFrontControls')) {
             $this->EnsureWebFrontControls();
@@ -115,6 +139,7 @@ class EnergyDashboard extends IPSModule
             @$this->SetValue(self::IDENT_SOURCES, $error);
             @$this->SetValue(self::IDENT_USAGE, $error);
             @$this->SetValue(self::IDENT_SANKEY, $error);
+            @$this->SetValue(self::IDENT_SANKEY_LIVE, $error);
             $this->SendDebug(__FUNCTION__, $e->getMessage(), 0);
             $this->SetStatus(201);
         }
@@ -292,7 +317,8 @@ class EnergyDashboard extends IPSModule
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals, $targetComparison));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
         $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart, $totals, $label));
-        $this->SetValue(self::IDENT_SANKEY, $this->GetSankeyHtml($totals, $label));
+        $this->SetValue(self::IDENT_SANKEY, $this->GetSankeyHtml($totals, $label, false));
+        $this->SetValue(self::IDENT_SANKEY_LIVE, $this->GetSankeyHtml($totals, $label, true));
         $this->SyncControlsFromAttributes();
     }
 
@@ -1342,6 +1368,7 @@ class EnergyDashboard extends IPSModule
 
     private function GetOverviewHtml(array $t, array $targetComparison = []): string
     {
+        $theme = $this->GetThemeConfig();
         $mode = $this->ReadAttributeString('PeriodMode');
         $batteryExtra = '';
 
@@ -1356,7 +1383,7 @@ class EnergyDashboard extends IPSModule
         }
 
         $targetHtml = '';
-        if (($targetComparison['enabled'] ?? False) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
+        if (($targetComparison['enabled'] ?? false) && ((float) ($targetComparison['target'] ?? 0.0)) > 0) {
             $targetHtml = '<div class="edb-section" style="margin-top:12px;">Soll / Ist Vergleich</div>'
                 . '<div class="edb-grid">'
                 . $this->OverviewBox('Soll', $this->Fmt((float) $targetComparison['target']) . ' kWh')
@@ -1366,52 +1393,11 @@ class EnergyDashboard extends IPSModule
                 . '</div>';
         }
 
-        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>
-            .edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
-            .edb-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-            .edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
-            .edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
-            .edb-title{font-size:24px;font-weight:700}
-            .edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:#fff;border:1px solid #d0d0d0;border-radius:14px}
-            .edb-box{background:#fff;border:1px solid #e1e1e1;border-radius:12px;padding:12px}
-            .edb-label{font-size:12px;color:#666;margin-bottom:4px}
-            .edb-value{font-size:20px;font-weight:700}
-            .edb-section{font-size:14px;font-weight:700;color:#555;margin-bottom:6px}
-            </style>'
-
-            . '<div class="edb-card">'
-            . '<div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div><div class="edb-badge">+' . $this->Fmt((float) $t['netUsage']) . ' kWh</div></div>'
-
-            . '<div class="edb-grid">'
-            . $this->OverviewBox('PV', $this->Fmt((float) $t['pv']) . ' kWh')
-            . $this->OverviewBox('Bezug', $this->Fmt((float) $t['gridImport']) . ' kWh')
-            . $this->OverviewBox('Einspeisung', $this->Fmt((float) $t['gridExport']) . ' kWh')
-            . $this->OverviewBox('Verbrauch', $this->Fmt((float) $t['load']) . ' kWh')
-            . '</div>'
-
-            . '<div class="edb-2col" style="margin-top:12px;">'
-
-                . '<div>'
-                . '<div class="edb-section">Eigenverbrauch & Autarkie</div>'
-                . '<div class="edb-grid">'
-                . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh')
-                . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %')
-                . '</div>'
-                . '</div>'
-
-                . '<div>'
-                . '<div class="edb-section">Batterie-Analyse</div>'
-                . '<div class="edb-grid">'
-                . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
-                . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
-                . $batteryExtra
-                . '</div>'
-                . '</div>'
-
-            . '</div>'
-            . $targetHtml
-            . '</div></div>';
+        return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
+            . '<style>.edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.edb-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.edb-title{font-size:24px;font-weight:700}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:' . $theme['card'] . ';border:1px solid ' . $theme['border'] . ';border-radius:14px}.edb-box{background:' . $theme['card'] . ';border:1px solid ' . $theme['border'] . ';border-radius:12px;padding:12px}.edb-label{font-size:12px;color:' . $theme['muted'] . ';margin-bottom:4px}.edb-value{font-size:20px;font-weight:700}.edb-section{font-size:14px;font-weight:700;color:' . $theme['muted'] . ';margin-bottom:6px}</style>'
+            . '<div class="edb-card"><div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div><div class="edb-badge">+' . $this->Fmt((float) $t['netUsage']) . ' kWh</div></div>'
+            . '<div class="edb-grid">' . $this->OverviewBox('PV', $this->Fmt((float) $t['pv']) . ' kWh') . $this->OverviewBox('Bezug', $this->Fmt((float) $t['gridImport']) . ' kWh') . $this->OverviewBox('Einspeisung', $this->Fmt((float) $t['gridExport']) . ' kWh') . $this->OverviewBox('Verbrauch', $this->Fmt((float) $t['load']) . ' kWh') . '</div>'
+            . '<div class="edb-2col" style="margin-top:12px;"><div><div class="edb-section">Eigenverbrauch & Autarkie</div><div class="edb-grid">' . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh') . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %') . '</div></div><div><div class="edb-section">Batterie-Analyse</div><div class="edb-grid">' . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh') . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh') . $batteryExtra . '</div></div></div>' . $targetHtml . '</div></div>';
     }
 
     private function OverviewBox(string $label, string $value): string
@@ -1419,6 +1405,149 @@ class EnergyDashboard extends IPSModule
         return '<div class="edb-box"><div class="edb-label">' . htmlspecialchars($label) . '</div><div class="edb-value">' . htmlspecialchars($value) . '</div></div>';
     }
 
+
+
+
+
+    private function NormalizeHexColor(string $value, string $fallback): string
+    {
+        $value = trim($value);
+        if (preg_match('/^#[0-9a-fA-F]{6}$/', $value)) {
+            return $value;
+        }
+        return $fallback;
+    }
+
+    private function HexToRgba(string $hex, float $alpha): string
+    {
+        $hex = ltrim($hex, '#');
+        if (strlen($hex) !== 6) {
+            return 'rgba(0,0,0,' . $alpha . ')';
+        }
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+        return 'rgba(' . $r . ',' . $g . ',' . $b . ',' . $alpha . ')';
+    }
+
+    private function GetThemeConfig(): array
+    {
+        $preset = $this->ReadPropertyString('ThemePreset');
+
+        if ($preset === 'dark') {
+            $mode = 'dark';
+            $bg = '#121212';
+            $card = '#1f1f1f';
+            $text = '#f2f2f2';
+            $muted = '#bdbdbd';
+        } elseif ($preset === 'transparent') {
+            $mode = 'dark';
+            $bg = 'transparent';
+            $card = '#1f1f1f';
+            $text = '#f2f2f2';
+            $muted = '#bdbdbd';
+        } else {
+            $mode = 'light';
+            $bg = '#f7f7f7';
+            $card = '#ffffff';
+            $text = '#222222';
+            $muted = '#666666';
+        }
+
+        return [
+            'mode' => $mode,
+            'bg' => $bg,
+            'card' => $card,
+            'text' => $text,
+            'muted' => $muted,
+            'border' => ($mode === 'dark') ? '#444' : '#ddd',
+            'pv' => '#ff9800',
+            'grid' => '#f44336',
+            'battery' => '#2196f3',
+            'house' => '#4caf50',
+            'soc' => '#4caf50',
+            'pvFill' => 'rgba(255,152,0,0.2)',
+            'gridFill' => 'rgba(244,67,54,0.15)',
+            'batteryFill' => 'rgba(33,150,243,0.15)',
+            'socFill' => 'rgba(76,175,80,0.0)'
+        ];
+    }
+
+    private function GetConfiguredLivePowerVarId(string $kind): int
+    {
+        $map = [
+            'pv' => ['SankeyLivePvID', 'PvPowerID'],
+            'grid' => ['SankeyLiveGridID', 'GridPowerID'],
+            'load' => ['SankeyLiveLoadID', 'LoadPowerID'],
+            'battery' => ['SankeyLiveBatteryID', 'BatteryPowerID']
+        ];
+        $props = $map[$kind] ?? null;
+        if ($props === null) {
+            return 0;
+        }
+        $preferred = $this->ReadPropertyInteger($props[0]);
+        if ($preferred > 0) {
+            return $preferred;
+        }
+        return $this->ReadPropertyInteger($props[1]);
+    }
+
+    private function GetCurrentPowerValueKw(int $varID, bool $invert): float
+    {
+        if (!$this->IsValidVar($varID)) {
+            return 0.0;
+        }
+        return round($this->ApplySign((float) GetValue($varID), $invert) / 1000.0, 3);
+    }
+
+    private function GetSankeyLiveFlowsKw(): array
+    {
+        $pv = max(0.0, $this->GetCurrentPowerValueKw($this->GetConfiguredLivePowerVarId('pv'), $this->ReadPropertyBoolean('InvertPv')));
+        $grid = $this->GetCurrentPowerValueKw($this->GetConfiguredLivePowerVarId('grid'), $this->ReadPropertyBoolean('InvertGrid'));
+        $load = max(0.0, $this->GetCurrentPowerValueKw($this->GetConfiguredLivePowerVarId('load'), $this->ReadPropertyBoolean('InvertLoad')));
+        $battery = $this->GetCurrentPowerValueKw($this->GetConfiguredLivePowerVarId('battery'), $this->ReadPropertyBoolean('InvertBattery'));
+
+        $gridImport = max(0.0, $grid);
+        $gridExport = max(0.0, -$grid);
+        $battCharge = max(0.0, -$battery);
+        $battDischarge = max(0.0, $battery);
+
+        $pvRemaining = max(0.0, $pv - $gridExport);
+        $pvToBattery = min($battCharge, $pvRemaining);
+        $pvRemaining -= $pvToBattery;
+
+        $pvToLoad = min($load, $pvRemaining);
+        $remainingLoad = max(0.0, $load - $pvToLoad);
+
+        $batteryToLoad = min($battDischarge, $remainingLoad);
+        $remainingLoad -= $batteryToLoad;
+
+        $gridToLoad = min($gridImport, $remainingLoad);
+
+        return [
+            ['PV', 'Haus', round($pvToLoad, 3)],
+            ['PV', 'Batterie', round($pvToBattery, 3)],
+            ['PV', 'Netz', round($gridExport, 3)],
+            ['Netz', 'Haus', round($gridToLoad, 3)],
+            ['Batterie', 'Haus', round($batteryToLoad, 3)]
+        ];
+    }
+
+    private function GetSankeyTooltipMap(array $flows, float $total, string $unit): array
+    {
+        $map = [];
+        foreach ($flows as $row) {
+            $key = $row[0] . '|' . $row[1];
+            $value = (float) $row[2];
+            $pct = ($total > 0) ? round(($value / $total) * 100.0, 1) : 0.0;
+            $map[$key] = [
+                'value' => $value,
+                'percent' => $pct,
+                'unit' => $unit
+            ];
+        }
+        return $map;
+    }
 
     private function GetSankeyFlows(array $t): array
     {
@@ -1451,53 +1580,65 @@ class EnergyDashboard extends IPSModule
         ];
     }
 
-    private function GetSankeyHtml(array $totals, string $label): string
+    private function GetSankeyHtml(array $totals, string $label, bool $liveMode = false): string
     {
-        $flows = array_values(array_filter($this->GetSankeyFlows($totals), function ($row) {
-            return (float) $row[2] > 0.01;
-        }));
+        if (($liveMode && !$this->ReadPropertyBoolean('ShowSankeyLive')) || (!$liveMode && !$this->ReadPropertyBoolean('ShowSankeyPeriod'))) {
+            return '';
+        }
 
+        $theme = $this->GetThemeConfig();
+        $showPercentages = $this->ReadPropertyBoolean('SankeyShowPercentages');
+
+        if ($liveMode) {
+            $flows = array_values(array_filter($this->GetSankeyLiveFlowsKw(), function ($row) { return (float) $row[2] > 0.001; }));
+            $unit = 'kW';
+            $title = 'Energiefluss Live';
+        } else {
+            $flows = array_values(array_filter($this->GetSankeyFlows($totals), function ($row) { return (float) $row[2] > 0.01; }));
+            $unit = 'kWh';
+            $title = 'Energiefluss Zeitraum';
+        }
+
+        $total = 0.0;
+        foreach ($flows as $row) { $total += (float) $row[2]; }
+
+        $tooltipMap = $this->GetSankeyTooltipMap($flows, $total, $unit);
         $json = json_encode($flows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $labelEsc = htmlspecialchars($label);
+        $tooltipJson = json_encode($tooltipMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:300px}</style>'
-            . '<div class="edb-card"><div class="edb-title">Energiefluss</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><div id="edbSankeyChart" style="width:100%;height:100%;"></div></div></div>'
+        $valuesHtml = '';
+        foreach ($flows as $row) {
+            $valuesHtml .= '<span style="margin-right:12px;"><b>' . $row[0] . '→' . $row[1] . ':</b> ' . number_format($row[2], 2, ',', '.') . ' ' . $unit . '</span>';
+        }
+
+        $containerId = $liveMode ? 'edbSankeyChartLive' : 'edbSankeyChartKwh';
+        $tipId = $liveMode ? 'edbSankeyTipLive' : 'edbSankeyTipKwh';
+        $refresh = max(5, (int)$this->ReadPropertyInteger('SankeyLiveRefresh')) * 1000;
+        $liveFlag = $liveMode ? 'true' : 'false';
+
+        return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
+            . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px}.edb-wrap{position:relative;height:300px}.edb-tip{position:absolute;display:none;background:rgba(33,33,33,.96);color:#fff;padding:8px;border-radius:8px;font-size:12px}.edb-sub{font-size:12px;color:' . $theme['muted'] . ';margin-bottom:10px}</style>'
+            . '<div class="edb-card"><div style="font-size:20px;font-weight:bold;margin-bottom:6px;">' . $title . '</div><div class="edb-sub">' . htmlspecialchars($label) . '</div><div style="margin-bottom:10px;">' . $valuesHtml . '</div><div class="edb-wrap"><div id="' . $containerId . '" style="width:100%;height:100%;"></div><div id="' . $tipId . '" class="edb-tip"></div></div></div>'
             . '<script src="https://www.gstatic.com/charts/loader.js"></script>'
-            . '<script>(function(){var rows=' . $json . ';google.charts.load("current",{packages:["sankey"]});google.charts.setOnLoadCallback(function(){var data=new google.visualization.DataTable();data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","kWh");data.addRows(rows);var chart=new google.visualization.Sankey(document.getElementById("edbSankeyChart"));chart.draw(data,{height:300,sankey:{node:{label:{fontName:"Arial",fontSize:13}}}});});})();</script>'
+            . '<script>(function(){var rows=' . $json . ';var tooltipMap=' . $tooltipJson . ';var theme=' . $themeJson . ';var showPct=' . ($showPercentages ? 'true' : 'false') . ';var liveMode=' . $liveFlag . ';google.charts.load("current",{packages:["sankey"]});google.charts.setOnLoadCallback(draw);function draw(){var data=new google.visualization.DataTable();data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","Wert");data.addRows(rows);var el=document.getElementById("' . $containerId . '");if(!el){return;}var chart=new google.visualization.Sankey(el);chart.draw(data,{height:300,tooltip:{trigger:"none"},sankey:{node:{colors:[theme.pv,theme.house,theme.battery,theme.grid]},link:{colorMode:"gradient",colors:[theme.pv,theme.house,theme.battery,theme.grid]}}});google.visualization.events.addListener(chart,"onmouseover",function(e){if(typeof e.row!=="number"||e.row<0||e.row>=rows.length)return;var from=data.getValue(e.row,0);var to=data.getValue(e.row,1);var meta=tooltipMap[from+"|"+to];if(!meta)return;var tip=document.getElementById("' . $tipId . '");var html="<b>"+from+"→"+to+"</b><br>"+meta.value.toFixed(2)+" "+meta.unit;if(showPct){html+="<br>"+meta.percent.toFixed(1)+" %";}tip.innerHTML=html;tip.style.display="block";});google.visualization.events.addListener(chart,"onmouseout",function(){document.getElementById("' . $tipId . '").style.display="none";});el.addEventListener("mousemove",function(ev){var tip=document.getElementById("' . $tipId . '");tip.style.left=(ev.offsetX+14)+"px";tip.style.top=(ev.offsetY+14)+"px";});}if(liveMode){setInterval(draw,' . $refresh . ');} })();</script>'
             . '</div>';
     }
 
     private function GetSourcesHtml(array $data, string $label): string
     {
+        $theme = $this->GetThemeConfig();
         $unit = $data['unit'] ?? 'kW';
         $chartType = $data['chartType'] ?? 'line';
-        $json = json_encode([
-            'labels' => $data['labels'],
-            'pv' => $data['pv'],
-            'grid' => $data['grid'],
-            'load' => $data['load'],
-            'battery' => $data['battery'],
-            'soc' => $data['soc'] ?? []
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
+        $json = json_encode(['labels' => $data['labels'], 'pv' => $data['pv'], 'grid' => $data['grid'], 'load' => $data['load'], 'battery' => $data['battery'], 'soc' => $data['soc'] ?? []], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
         $labelEsc = htmlspecialchars($label);
-        $unitEsc = htmlspecialchars($unit);
-        $typeEsc = htmlspecialchars($chartType);
-
-        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
+        return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
+            . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:' . $theme['muted'] . ';margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
             . '<div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-            . '<script>(function(){const d=' . $json . ';const chartType="' . $typeEsc . '";const ds=['
-            . '{label:"PV",data:d.pv,borderColor:"rgba(255,152,0,1)",backgroundColor:"rgba(255,152,0,.18)",fill:false,tension:.25,pointRadius:0,borderWidth:2},'
-            . '{label:"Netz",data:d.grid,borderColor:"rgba(0,188,212,1)",backgroundColor:"rgba(0,188,212,.12)",fill:false,tension:.2,pointRadius:0,borderWidth:2},'
-            . '{label:"Verbrauch",data:d.load,borderColor:"rgba(0,0,0,.95)",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
-            . '{label:"Batterie",data:d.battery,borderColor:"rgba(63,81,181,1)",backgroundColor:"rgba(63,81,181,.12)",tension:.15,pointRadius:0,borderWidth:2.5}'
-            . '];'
-            . 'if(Array.isArray(d.soc) && d.soc.length>0){ds.push({label:"SoC",data:d.soc,borderColor:"rgba(76,175,80,1)",backgroundColor:"rgba(76,175,80,0)",borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"});}'
-            . 'new Chart(document.getElementById("edbSourceChart"),{type:chartType,data:{labels:d.labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"' . $unitEsc . '"}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,grid:{drawOnChartArea:false},title:{display:true,text:"SoC %"}},x:{ticks:{maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}}}}}});})();</script>'
+            . '<script>(function(){const d=' . $json . ';const theme=' . $themeJson . ';new Chart(document.getElementById("edbSourceChart"),{type:"' . $chartType . '",data:{labels:d.labels,datasets:[{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:.25,pointRadius:0,borderWidth:2},{label:"Netz",data:d.grid,borderColor:theme.grid,backgroundColor:theme.gridFill,fill:false,tension:.2,pointRadius:0,borderWidth:2},{label:"Verbrauch",data:d.load,borderColor:"#000000",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},{label:"Batterie",data:d.battery,borderColor:theme.battery,backgroundColor:theme.batteryFill,tension:.15,pointRadius:0,borderWidth:2.5}].concat((Array.isArray(d.soc)&&d.soc.length>0)?[{label:"SoC",data:d.soc,borderColor:theme.soc,backgroundColor:theme.socFill,borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"}]:[])},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}}},scales:{y:{ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"kW",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}}});})();</script>'
             . '</div>';
     }
 
