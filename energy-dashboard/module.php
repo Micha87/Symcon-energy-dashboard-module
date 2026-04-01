@@ -62,6 +62,7 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyInteger('PvTargetTotalID', 0);
         $this->RegisterPropertyBoolean('ShowPeakValues', false);
         $this->RegisterPropertyBoolean('ShowPeakTimestamps', false);
+        $this->RegisterPropertyBoolean('ShowPeakTimestampsLong', false);
 
         $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
@@ -906,99 +907,130 @@ class EnergyDashboard extends IPSModule
     }
 
 
-    private function GetPeakValuesFromSourceChart(array $sourceChart): array
+    private function GetPeakValuesFromArchive(int $archiveID, int $rangeStart, int $rangeEnd): array
     {
         $mode = $this->ReadAttributeString('PeriodMode');
-        $showTimestamp = $this->ReadPropertyBoolean('ShowPeakTimestamps') && in_array($mode, ['day', 'week'], true);
+        $showTimestamp = $this->ReadPropertyBoolean('ShowPeakTimestamps') && (in_array($mode, ['day', 'week'], true) || $this->ReadPropertyBoolean('ShowPeakTimestampsLong'));
 
-        $result = [
-            'pv' => ['value' => 0.0, 'timestamp' => 0],
-            'load' => ['value' => 0.0, 'timestamp' => 0],
-            'gridImport' => ['value' => 0.0, 'timestamp' => 0],
-            'gridExport' => ['value' => 0.0, 'timestamp' => 0],
-            'batteryCharge' => ['value' => 0.0, 'timestamp' => 0],
-            'batteryDischarge' => ['value' => 0.0, 'timestamp' => 0]
-        ];
+        $formatTs = function (int $ts) use ($mode): string {
+            if ($ts <= 0) {
+                return '';
+            }
+            if (in_array($mode, ['day', 'week'], true)) {
+                return date('d.m H:i', $ts);
+            }
+            return date('d.m.Y', $ts);
+        };
 
-        $timestamps = $sourceChart['timestamps'] ?? [];
-
-        $findMax = function(array $values, bool $positiveOnly = false) use ($timestamps, $showTimestamp): array {
-            if (count($values) === 0) {
+        $getPeak = function (int $varID, bool $invert, bool $useMin = false, bool $positiveOnly = false) use ($archiveID, $rangeStart, $rangeEnd) {
+            if (!$this->IsValidVar($varID)) {
                 return ['value' => 0.0, 'timestamp' => 0];
             }
-            $bestVal = -INF;
-            $bestIdx = null;
-            foreach ($values as $i => $v) {
-                $val = (float) $v;
+
+            $rangeSeconds = max(1, $rangeEnd - $rangeStart);
+            $aggregation = 0;
+            if ($rangeSeconds > 7 * 86400 && $rangeSeconds <= 120 * 86400) {
+                $aggregation = 1; // hourly
+            } elseif ($rangeSeconds > 120 * 86400) {
+                $aggregation = 2; // daily
+            }
+
+            if ($aggregation === 0) {
+                $rows = @AC_GetLoggedValues($archiveID, $varID, $rangeStart, $rangeEnd, 10000);
+            } else {
+                $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $rangeStart, $rangeEnd, 0);
+            }
+            if (!is_array($rows)) {
+                $rows = [];
+            }
+
+            $bestVal = $useMin ? INF : -INF;
+            $bestTs = 0;
+
+            foreach ($rows as $row) {
+                if ($aggregation === 0) {
+                    if (!isset($row['Value'])) {
+                        continue;
+                    }
+                    $val = (float) $row['Value'];
+                    $ts = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
+                } else {
+                    if ($useMin && isset($row['Min'])) {
+                        $val = (float) $row['Min'];
+                    } elseif (!$useMin && isset($row['Max'])) {
+                        $val = (float) $row['Max'];
+                    } elseif (isset($row['Avg'])) {
+                        $val = (float) $row['Avg'];
+                    } else {
+                        continue;
+                    }
+                    $ts = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
+                }
+
+                $val = $this->ApplySign($val, $invert);
                 if ($positiveOnly) {
                     $val = max(0.0, $val);
                 }
-                if ($val > $bestVal) {
-                    $bestVal = $val;
-                    $bestIdx = $i;
+
+                if ($useMin) {
+                    if ($val < $bestVal) {
+                        $bestVal = $val;
+                        $bestTs = $ts;
+                    }
+                } else {
+                    if ($val > $bestVal) {
+                        $bestVal = $val;
+                        $bestTs = $ts;
+                    }
                 }
             }
-            if ($bestVal === -INF) {
+
+            if ($bestVal === INF || $bestVal === -INF) {
                 $bestVal = 0.0;
+                $bestTs = 0;
             }
-            $ts = ($showTimestamp && $bestIdx !== null && isset($timestamps[$bestIdx])) ? (int) $timestamps[$bestIdx] : 0;
-            return ['value' => round($bestVal, 2), 'timestamp' => $ts];
+
+            return ['value' => round($bestVal / 1000.0, 2), 'timestamp' => $bestTs];
         };
 
-        $findMinAbs = function(array $values) use ($timestamps, $showTimestamp): array {
-            if (count($values) === 0) {
-                return ['value' => 0.0, 'timestamp' => 0];
-            }
-            $bestVal = INF;
-            $bestIdx = null;
-            foreach ($values as $i => $v) {
-                $val = (float) $v;
-                if ($val < $bestVal) {
-                    $bestVal = $val;
-                    $bestIdx = $i;
-                }
-            }
-            if ($bestVal === INF) {
-                $bestVal = 0.0;
-            }
-            $ts = ($showTimestamp && $bestIdx !== null && isset($timestamps[$bestIdx])) ? (int) $timestamps[$bestIdx] : 0;
-            return ['value' => round(abs(min(0.0, $bestVal)), 2), 'timestamp' => $ts];
-        };
+        $pv = $getPeak($this->ReadPropertyInteger('PvPowerID'), $this->ReadPropertyBoolean('InvertPv'), false, true);
+        $load = $getPeak($this->ReadPropertyInteger('LoadPowerID'), $this->ReadPropertyBoolean('InvertLoad'), false, true);
+        $gridImport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), false, true);
+        $gridExport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), true, false);
+        $batteryCharge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), true, false);
+        $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, false);
 
-        $result['pv'] = $findMax($sourceChart['pv'] ?? [], true);
-        $result['load'] = $findMax($sourceChart['load'] ?? [], true);
-        $result['gridImport'] = $findMax($sourceChart['grid'] ?? [], true);
-        $result['gridExport'] = $findMinAbs($sourceChart['grid'] ?? []);
-        $result['batteryDischarge'] = $findMax($sourceChart['battery'] ?? [], false);
-        $result['batteryCharge'] = $findMinAbs($sourceChart['battery'] ?? []);
-
-        return $result;
+        return [
+            'pv' => ['value' => max(0.0, $pv['value']), 'timestamp' => $showTimestamp ? $pv['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($pv['timestamp']) : ''],
+            'load' => ['value' => max(0.0, $load['value']), 'timestamp' => $showTimestamp ? $load['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($load['timestamp']) : ''],
+            'gridImport' => ['value' => max(0.0, $gridImport['value']), 'timestamp' => $showTimestamp ? $gridImport['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($gridImport['timestamp']) : ''],
+            'gridExport' => ['value' => abs(min(0.0, $gridExport['value'])), 'timestamp' => $showTimestamp ? $gridExport['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($gridExport['timestamp']) : ''],
+            'batteryCharge' => ['value' => abs(min(0.0, $batteryCharge['value'])), 'timestamp' => $showTimestamp ? $batteryCharge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($batteryCharge['timestamp']) : ''],
+            'batteryDischarge' => ['value' => max(0.0, $batteryDischarge['value']), 'timestamp' => $showTimestamp ? $batteryDischarge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($batteryDischarge['timestamp']) : '']
+        ];
     }
 
     private function GetPeakValues(int $archiveID, int $rangeStart, int $rangeEnd): array
     {
         if (!$this->ReadPropertyBoolean('ShowPeakValues')) {
             return [
-                'pv' => ['value' => 0.0, 'timestamp' => 0],
-                'load' => ['value' => 0.0, 'timestamp' => 0],
-                'gridImport' => ['value' => 0.0, 'timestamp' => 0],
-                'gridExport' => ['value' => 0.0, 'timestamp' => 0],
-                'batteryCharge' => ['value' => 0.0, 'timestamp' => 0],
-                'batteryDischarge' => ['value' => 0.0, 'timestamp' => 0]
+                'pv' => ['value' => 0.0, 'timestamp' => 0, 'text' => ''],
+                'load' => ['value' => 0.0, 'timestamp' => 0, 'text' => ''],
+                'gridImport' => ['value' => 0.0, 'timestamp' => 0, 'text' => ''],
+                'gridExport' => ['value' => 0.0, 'timestamp' => 0, 'text' => ''],
+                'batteryCharge' => ['value' => 0.0, 'timestamp' => 0, 'text' => ''],
+                'batteryDischarge' => ['value' => 0.0, 'timestamp' => 0, 'text' => '']
             ];
         }
-
-        $sourceChart = $this->BuildSourceChartData($archiveID, $rangeStart, $rangeEnd);
-        return $this->GetPeakValuesFromSourceChart($sourceChart);
+        return $this->GetPeakValuesFromArchive($archiveID, $rangeStart, $rangeEnd);
     }
 
     private function FormatPeakValue($peak): string
     {
         if (is_array($peak)) {
             $value = $this->Fmt((float) ($peak['value'] ?? 0.0)) . ' kW';
-            $timestamp = (int) ($peak['timestamp'] ?? 0);
-            if ($this->ReadPropertyBoolean('ShowPeakTimestamps') && $timestamp > 0) {
-                $value .= ' · ' . date('d.m H:i', $timestamp);
+            if ($this->ReadPropertyBoolean('ShowPeakTimestamps') && !empty($peak['text'])) {
+                $value .= ' · ' . $peak['text'];
             }
             return $value;
         }
