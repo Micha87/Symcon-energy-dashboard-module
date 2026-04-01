@@ -1012,47 +1012,6 @@ class EnergyDashboard extends IPSModule
         return $meta;
     }
 
-        $points = [
-            'pv' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('PvPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertPv')),
-            'grid' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('GridPowerID'), $rangeStart, $rangeEnd, true, $this->ReadPropertyBoolean('InvertGrid')),
-            'load' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertLoad'))
-        ];
-        foreach ($points as $key => $point) {
-            if ($point['timestamp'] <= 0) {
-                continue;
-            }
-            $meta[$key]['value'] = $point['value'];
-            $meta[$key]['time'] = date('d.m H:i', $point['timestamp']);
-            $closestIdx = null;
-            $closestDiff = PHP_INT_MAX;
-            if (isset($chartData['timestamps']) && is_array($chartData['timestamps'])) {
-                foreach ($chartData['timestamps'] as $i => $ts) {
-                    $diff = abs((int) $ts - (int) $point['timestamp']);
-                    if ($diff < $closestDiff) {
-                        $closestDiff = $diff;
-                        $closestIdx = $i;
-                    }
-                }
-            }
-            $meta[$key]['index'] = $closestIdx;
-        }
-        if ($this->ReadPropertyBoolean('ShowGlobalPeakOnly')) {
-            $bestKey = null;
-            $bestVal = -1.0;
-            foreach (['pv', 'grid', 'load'] as $k) {
-                if (($meta[$k]['value'] ?? 0.0) > $bestVal) {
-                    $bestVal = (float) $meta[$k]['value'];
-                    $bestKey = $k;
-                }
-            }
-            foreach (['pv', 'grid', 'load'] as $k) {
-                if ($k !== $bestKey) {
-                    $meta[$k]['index'] = null;
-                }
-            }
-        }
-        return $meta;
-    }
 
     private function GetPeakValues(int $archiveID, int $rangeStart, int $rangeEnd): array
     {
