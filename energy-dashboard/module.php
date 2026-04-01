@@ -875,12 +875,80 @@ class EnergyDashboard extends IPSModule
     }
 
 
-    private function GetRealPeakPoint(int $archiveID, int $varID, int $rangeStart, int $rangeEnd, bool $onlyPositive = false, bool $invert = false): array
+    private function GetRealPeakPoint(int $archiveID, int $varID, int $rangeStart, int $rangeEnd, bool $onlyPositive = false, bool $invert = false, bool $findMin = false): array
     {
-        $result = ['timestamp' => 0, 'value' => 0.0];
+        $result = ['timestamp' => 0, 'value' => $findMin ? INF : 0.0];
         if (!$this->IsValidVar($varID)) {
-            return $result;
+            return ['timestamp' => 0, 'value' => 0.0];
         }
+
+        $rangeSeconds = max(1, $rangeEnd - $rangeStart);
+        $useLogged = $rangeSeconds <= 14 * 86400;
+
+        if ($useLogged) {
+            $rows = @AC_GetLoggedValues($archiveID, $varID, $rangeStart, $rangeEnd, 10000);
+            if (!is_array($rows)) {
+                $rows = [];
+            }
+            foreach ($rows as $row) {
+                if (!isset($row['Value'])) {
+                    continue;
+                }
+                $val = $this->ApplySign((float) $row['Value'], $invert);
+                if ($onlyPositive) {
+                    $val = max(0.0, $val);
+                }
+                if ($findMin) {
+                    if ($val < $result['value']) {
+                        $result['value'] = $val;
+                        $result['timestamp'] = (int) $row['TimeStamp'];
+                    }
+                } else {
+                    if ($val > $result['value']) {
+                        $result['value'] = $val;
+                        $result['timestamp'] = (int) $row['TimeStamp'];
+                    }
+                }
+            }
+        } else {
+            $aggregation = 1; // stündlich
+            if ($rangeSeconds > 120 * 86400) {
+                $aggregation = 2; // täglich
+            }
+            $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $rangeStart, $rangeEnd, 0);
+            if (!is_array($rows)) {
+                $rows = [];
+            }
+            foreach ($rows as $row) {
+                if (!isset($row['Avg'])) {
+                    continue;
+                }
+                $val = $this->ApplySign((float) $row['Avg'], $invert);
+                if ($onlyPositive) {
+                    $val = max(0.0, $val);
+                }
+                if ($findMin) {
+                    if ($val < $result['value']) {
+                        $result['value'] = $val;
+                        $result['timestamp'] = (int) $row['TimeStamp'];
+                    }
+                } else {
+                    if ($val > $result['value']) {
+                        $result['value'] = $val;
+                        $result['timestamp'] = (int) $row['TimeStamp'];
+                    }
+                }
+            }
+        }
+
+        if ($result['value'] === INF) {
+            $result['value'] = 0.0;
+        }
+
+        $result['value'] = round($result['value'] / 1000.0, 2);
+        return $result;
+    }
+
         $rows = @AC_GetLoggedValues($archiveID, $varID, $rangeStart, $rangeEnd, 0);
         if (!is_array($rows) || count($rows) === 0) {
             return $result;
@@ -905,13 +973,65 @@ class EnergyDashboard extends IPSModule
     private function BuildPeakMeta(int $archiveID, int $rangeStart, int $rangeEnd, array $chartData): array
     {
         $meta = [
-            'pv' => ['dataset' => 0, 'index' => null, 'value' => 0.0, 'label' => 'PV', 'time' => ''],
-            'grid' => ['dataset' => 1, 'index' => null, 'value' => 0.0, 'label' => 'Netz', 'time' => ''],
-            'load' => ['dataset' => 2, 'index' => null, 'value' => 0.0, 'label' => 'Verbrauch', 'time' => '']
+            'pvMax' => ['dataset' => 0, 'index' => null, 'value' => 0.0, 'label' => 'PV Max'],
+            'gridMax' => ['dataset' => 1, 'index' => null, 'value' => 0.0, 'label' => 'Netz Max'],
+            'gridMin' => ['dataset' => 1, 'index' => null, 'value' => 0.0, 'label' => 'Netz Min'],
+            'loadMax' => ['dataset' => 2, 'index' => null, 'value' => 0.0, 'label' => 'Verbrauch Max'],
+            'batteryMax' => ['dataset' => 3, 'index' => null, 'value' => 0.0, 'label' => 'Batterie Max'],
+            'batteryMin' => ['dataset' => 3, 'index' => null, 'value' => 0.0, 'label' => 'Batterie Min']
         ];
         if (!$this->ReadPropertyBoolean('ShowPeaksInChart')) {
             return $meta;
         }
+
+        $points = [
+            'pvMax' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('PvPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertPv'), false),
+            'gridMax' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('GridPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertGrid'), false),
+            'gridMin' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('GridPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertGrid'), true),
+            'loadMax' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertLoad'), false),
+            'batteryMax' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertBattery'), false),
+            'batteryMin' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertBattery'), true)
+        ];
+
+        foreach ($points as $key => $point) {
+            $meta[$key]['value'] = $point['value'];
+            if ($point['timestamp'] <= 0) {
+                continue;
+            }
+            $closestIdx = null;
+            $closestDiff = PHP_INT_MAX;
+            if (isset($chartData['timestamps']) && is_array($chartData['timestamps'])) {
+                foreach ($chartData['timestamps'] as $i => $ts) {
+                    $diff = abs((int) $ts - (int) $point['timestamp']);
+                    if ($diff < $closestDiff) {
+                        $closestDiff = $diff;
+                        $closestIdx = $i;
+                    }
+                }
+            }
+            $meta[$key]['index'] = $closestIdx;
+        }
+
+        if ($this->ReadPropertyBoolean('ShowGlobalPeakOnly')) {
+            $bestKey = null;
+            $bestVal = -INF;
+            foreach (['pvMax', 'gridMax', 'gridMin', 'loadMax', 'batteryMax', 'batteryMin'] as $k) {
+                $candidate = abs((float) ($meta[$k]['value'] ?? 0.0));
+                if ($candidate > $bestVal) {
+                    $bestVal = $candidate;
+                    $bestKey = $k;
+                }
+            }
+            foreach (array_keys($meta) as $k) {
+                if ($k !== $bestKey) {
+                    $meta[$k]['index'] = null;
+                }
+            }
+        }
+
+        return $meta;
+    }
+
         $points = [
             'pv' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('PvPowerID'), $rangeStart, $rangeEnd, false, $this->ReadPropertyBoolean('InvertPv')),
             'grid' => $this->GetRealPeakPoint($archiveID, $this->ReadPropertyInteger('GridPowerID'), $rangeStart, $rangeEnd, true, $this->ReadPropertyBoolean('InvertGrid')),
@@ -1828,8 +1948,8 @@ class EnergyDashboard extends IPSModule
             . '<script>(function(){const d=' . $json . ';const theme=' . $themeJson . ';const peaks=' . $peakJson . ';const showPeakLabels=' . $showPeakLabels . ';'
             . 'const datasets=[{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:.25,pointRadius:0,borderWidth:2},{label:"Netz",data:d.grid,borderColor:theme.grid,backgroundColor:theme.gridFill,fill:false,tension:.2,pointRadius:0,borderWidth:2},{label:"Verbrauch",data:d.load,borderColor:"#000000",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},{label:"Batterie",data:d.battery,borderColor:theme.battery,backgroundColor:theme.batteryFill,tension:.15,pointRadius:0,borderWidth:2.5}];'
             . 'if(Array.isArray(d.soc)&&d.soc.length>0){datasets.push({label:"SoC",data:d.soc,borderColor:theme.soc,backgroundColor:theme.socFill,borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"});}'
-            . 'const peakPlugin={id:"peakPlugin",afterDatasetsDraw(chart){if(!peaks){return;}const ctx=chart.ctx;ctx.save();function drawPeak(datasetIndex,peak,color){if(!peak||peak.index===null||peak.index===undefined){return;}const meta=chart.getDatasetMeta(datasetIndex);if(!meta||!meta.data||!meta.data[peak.index]){return;}const point=meta.data[peak.index];const x=point.x;const y=point.y;ctx.beginPath();ctx.arc(x,y,5,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle="#ffffff";ctx.stroke();if(showPeakLabels){ctx.font="12px Arial";ctx.fillStyle=color;ctx.textAlign="left";ctx.textBaseline="bottom";const text=peak.label+": "+Number(peak.value).toFixed(2)+" kW"+(peak.time?" · "+peak.time:"");ctx.fillText(text,x+8,y-8);}}drawPeak(0,peaks.pv,theme.pv);drawPeak(1,peaks.grid,theme.grid);drawPeak(2,peaks.load,theme.house);ctx.restore();}};'
-            . 'new Chart(document.getElementById("edbSourceChart"),{type:"' . $chartType . '",data:{labels:d.labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}},tooltip:{callbacks:{afterBody:function(items){if(!items||items.length===0){return "";}const it=items[0];const map={0:peaks.pv,1:peaks.grid,2:peaks.load};const p=map[it.datasetIndex];if(p&&p.index===it.dataIndex&&p.time){return "Peak: "+p.time;}return "";}}}},scales:{y:{ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"' . $unit . '",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}},plugins:[peakPlugin]});})();</script>'
+            . 'const peakPlugin={id:"peakPlugin",afterDatasetsDraw(chart){if(!peaks){return;}const ctx=chart.ctx;ctx.save();function drawPeak(peak,color){if(!peak||peak.index===null||peak.index===undefined){return;}const meta=chart.getDatasetMeta(peak.dataset);if(!meta||!meta.data||!meta.data[peak.index]){return;}const point=meta.data[peak.index];const x=point.x;const y=point.y;ctx.beginPath();ctx.arc(x,y,5,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle="#ffffff";ctx.stroke();if(showPeakLabels){ctx.font="12px Arial";ctx.fillStyle=color;ctx.textAlign="left";ctx.textBaseline="bottom";const text=peak.label+": "+Number(peak.value).toFixed(2)+" kW";ctx.fillText(text,x+8,y-8);}}drawPeak(peaks.pvMax,theme.pv);drawPeak(peaks.gridMax,theme.grid);drawPeak(peaks.gridMin,theme.grid);drawPeak(peaks.loadMax,theme.house);drawPeak(peaks.batteryMax,theme.battery);drawPeak(peaks.batteryMin,theme.battery);ctx.restore();}};'
+            . 'new Chart(document.getElementById("edbSourceChart"),{type:"' . $chartType . '",data:{labels:d.labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}},tooltip:{callbacks:{afterBody:function(items){if(!items||items.length===0){return "";}const it=items[0];const all=[peaks.pvMax,peaks.gridMax,peaks.gridMin,peaks.loadMax,peaks.batteryMax,peaks.batteryMin];for(let i=0;i<all.length;i++){const p=all[i];if(p&&p.dataset===it.datasetIndex&&p.index===it.dataIndex){return "Peak: "+p.label+" ("+Number(p.value).toFixed(2)+" kW)";}}return "";}}}},scales:{y:{ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"' . $unit . '",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}},plugins:[peakPlugin]});})();</script>'
             . '</div>';
     }
 
