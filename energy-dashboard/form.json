@@ -441,6 +441,11 @@
           "type": "CheckBox",
           "name": "ShowPeakLabelsInChart",
           "caption": "Peak-Labels im Chart anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowGlobalPeakOnly",
+          "caption": "Nur höchsten Gesamtpeak markieren"
         }
       ]
     },
