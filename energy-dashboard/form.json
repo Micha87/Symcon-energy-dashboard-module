@@ -407,8 +407,13 @@
           "caption": "Zeitstempel bei Peak-Werten anzeigen"
         },
         {
+          "type": "CheckBox",
+          "name": "ShowPeakTimestampsLong",
+          "caption": "Zeitstempel auch bei Monat/Jahr anzeigen"
+        },
+        {
           "type": "Label",
-          "caption": "Verwendet Archiv-Max/Min je Zeitraum für PV, Verbrauch, Netz und Batterie."
+          "caption": "Verwendet Leistungswerte (Watt) aus dem Archiv. Max/Min je Zeitraum."
         }
       ]
     },
