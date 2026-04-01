@@ -915,6 +915,7 @@ class EnergyDashboard extends IPSModule
             'batteryCharge' => ['value' => 0.0, 'timestamp' => 0],
             'batteryDischarge' => ['value' => 0.0, 'timestamp' => 0]
         ];
+        // Peak-Werte werden aus den konfigurierten Leistungswerten (Watt) berechnet.
         if (!$this->ReadPropertyBoolean('ShowPeakValues')) {
             return $empty;
         }
