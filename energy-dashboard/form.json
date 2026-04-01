@@ -314,6 +314,76 @@
     },
     {
       "type": "ExpansionPanel",
+      "caption": "Leistungswerte (Watt)",
+      "items": [
+        {
+          "type": "SelectVariable",
+          "name": "PvPowerID",
+          "caption": "PV-Leistung",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "InvertPv",
+          "caption": "Vorzeichen PV-Leistung umkehren"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "GridPowerID",
+          "caption": "Netzleistung",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "InvertGrid",
+          "caption": "Vorzeichen Netzleistung umkehren"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "LoadPowerID",
+          "caption": "Verbrauchsleistung",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "InvertLoad",
+          "caption": "Vorzeichen Verbrauchsleistung umkehren"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryPowerID",
+          "caption": "Batterieleistung",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "InvertBattery",
+          "caption": "Vorzeichen Batterieleistung umkehren"
+        },
+        {
+          "type": "Label",
+          "caption": "Diese Watt-Werte werden für Stromquellen, Peak-Werte und optionales Live-Sankey genutzt."
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
       "caption": "Peak-Werte (optional)",
       "items": [
         {
