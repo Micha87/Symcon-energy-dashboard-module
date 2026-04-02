@@ -320,7 +320,7 @@ class EnergyDashboard extends IPSModule
         $peakValues = $this->GetPeakValues($archiveID, $rangeStart, $rangeEnd);
 
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals, $targetComparison, $peakValues));
-        $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label));
+        $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label, $peakValues));
         $this->SetValue(self::IDENT_USAGE, $this->GetUsageHtml($usageChart, $totals, $label));
         $this->SetValue(self::IDENT_SANKEY, $this->GetSankeyHtml($totals, $label, false));
         $this->SetValue(self::IDENT_SANKEY_LIVE, $this->GetSankeyHtml($totals, $label, true));
@@ -1027,7 +1027,7 @@ class EnergyDashboard extends IPSModule
     }
 
 
-    private function GetVisibleChartPeakMarkers(array $data): array
+    private function GetVisibleChartPeakMarkers(array $data, array $peakValues = []): array
     {
         $result = [
             'pv' => ['index' => null, 'value' => 0.0, 'label' => 'PV Max'],
@@ -1047,7 +1047,11 @@ class EnergyDashboard extends IPSModule
             $maxIdx = array_search($maxVal, $vals, true);
             if ($maxIdx !== false) {
                 $result[$target]['index'] = (int) $maxIdx;
-                $result[$target]['value'] = round((float) $maxVal, 2);
+                if (isset($peakValues[$target]) && is_array($peakValues[$target])) {
+                    $result[$target]['value'] = round((float) ($peakValues[$target]['value'] ?? 0.0), 2);
+                } else {
+                    $result[$target]['value'] = round((float) $maxVal, 2);
+                }
             }
         }
 
@@ -1875,7 +1879,7 @@ class EnergyDashboard extends IPSModule
             . '</div>';
     }
 
-    private function GetSourcesHtml(array $data, string $label): string
+    private function GetSourcesHtml(array $data, string $label, array $peakValues = []): string
     {
         $theme = $this->GetThemeConfig();
         $unit = $data['unit'] ?? 'kW';
@@ -1890,7 +1894,7 @@ class EnergyDashboard extends IPSModule
         ];
         $json = json_encode($chartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $markerJson = json_encode($this->GetVisibleChartPeakMarkers($chartPayload), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $markerJson = json_encode($this->GetVisibleChartPeakMarkers($chartPayload, $peakValues), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $showMarkers = $this->ReadPropertyBoolean('ShowPeakMarkersPvLoad') ? 'true' : 'false';
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
         $labelEsc = htmlspecialchars($label);
