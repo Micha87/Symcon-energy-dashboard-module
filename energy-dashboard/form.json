@@ -3,72 +3,14 @@
     {
       "type": "ValidationTextBox",
       "name": "Title",
-      "caption": "Titel"
+      "caption": "Titel",
+      "items": []
     },
     {
       "type": "CheckBox",
       "name": "CreateWebFrontControls",
-      "caption": "Bedienvariablen für WebFront anlegen"
-    },
-    {
-      "type": "SelectVariable",
-      "name": "PvPowerID",
-      "caption": "PV-Leistung (W)",
-      "validVariableTypes": [
-        1,
-        2
-      ],
-      "width": "420px"
-    },
-    {
-      "type": "CheckBox",
-      "name": "InvertPv",
-      "caption": "PV-Vorzeichen invertieren"
-    },
-    {
-      "type": "SelectVariable",
-      "name": "GridPowerID",
-      "caption": "Netzleistung (W, Bezug + / Einspeisung -)",
-      "validVariableTypes": [
-        1,
-        2
-      ],
-      "width": "420px"
-    },
-    {
-      "type": "CheckBox",
-      "name": "InvertGrid",
-      "caption": "Netz-Vorzeichen invertieren"
-    },
-    {
-      "type": "SelectVariable",
-      "name": "LoadPowerID",
-      "caption": "Hausverbrauch (W)",
-      "validVariableTypes": [
-        1,
-        2
-      ],
-      "width": "420px"
-    },
-    {
-      "type": "CheckBox",
-      "name": "InvertLoad",
-      "caption": "Verbrauch-Vorzeichen invertieren"
-    },
-    {
-      "type": "SelectVariable",
-      "name": "BatteryPowerID",
-      "caption": "Batterie-Leistung (W, optional)",
-      "validVariableTypes": [
-        1,
-        2
-      ],
-      "width": "420px"
-    },
-    {
-      "type": "CheckBox",
-      "name": "InvertBattery",
-      "caption": "Batterie-Vorzeichen invertieren"
+      "caption": "Bedienvariablen für WebFront anlegen",
+      "items": []
     },
     {
       "type": "ExpansionPanel",
@@ -314,6 +256,111 @@
     },
     {
       "type": "ExpansionPanel",
+      "caption": "Leistungswerte (Watt)",
+      "items": [
+        {
+          "type": "SelectVariable",
+          "name": "PvPowerID",
+          "caption": "PV-Leistung",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "InvertPv",
+          "caption": "Vorzeichen PV-Leistung umkehren"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "GridPowerID",
+          "caption": "Netzleistung",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "InvertGrid",
+          "caption": "Vorzeichen Netzleistung umkehren"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "LoadPowerID",
+          "caption": "Verbrauchsleistung",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "InvertLoad",
+          "caption": "Vorzeichen Verbrauchsleistung umkehren"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "BatteryPowerID",
+          "caption": "Batterieleistung",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "CheckBox",
+          "name": "InvertBattery",
+          "caption": "Vorzeichen Batterieleistung umkehren"
+        },
+        {
+          "type": "Label",
+          "caption": "Diese Watt-Werte werden für Stromquellen, Peak-Werte und optionales Live-Sankey genutzt."
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
+      "caption": "Peak-Werte (optional)",
+      "items": [
+        {
+          "type": "CheckBox",
+          "name": "ShowPeakValues",
+          "caption": "Peak-Werte im Dashboard anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowPeakTimestamps",
+          "caption": "Zeitstempel bei Peak-Werten anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowPeakTimestampsLong",
+          "caption": "Zeitstempel auch bei Monat/Jahr anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowPeakMarkersPvLoad",
+          "caption": "PV- und Verbrauchs-Peaks im Stromquellen-Chart anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "EnablePeakHoverDebug",
+          "caption": "Peak-Hover-Highlight aktivieren (Debug)"
+        },
+        {
+          "type": "Label",
+          "caption": "Verwendet Leistungswerte (Watt) aus dem Archiv. Max/Min je Zeitraum."
+        }
+      ]
+    },
+    {
+      "type": "ExpansionPanel",
       "caption": "Sankey (optional)",
       "items": [
         {
@@ -340,46 +387,6 @@
           "type": "CheckBox",
           "name": "SankeyAnimate",
           "caption": "Animation bei Updates aktivieren"
-        },
-        {
-          "type": "SelectVariable",
-          "name": "SankeyLivePvID",
-          "caption": "Live PV-Leistung (W, optional eigene Variable)",
-          "validVariableTypes": [
-            1,
-            2
-          ],
-          "width": "420px"
-        },
-        {
-          "type": "SelectVariable",
-          "name": "SankeyLiveGridID",
-          "caption": "Live Netzleistung (W, optional eigene Variable)",
-          "validVariableTypes": [
-            1,
-            2
-          ],
-          "width": "420px"
-        },
-        {
-          "type": "SelectVariable",
-          "name": "SankeyLiveLoadID",
-          "caption": "Live Verbrauch (W, optional eigene Variable)",
-          "validVariableTypes": [
-            1,
-            2
-          ],
-          "width": "420px"
-        },
-        {
-          "type": "SelectVariable",
-          "name": "SankeyLiveBatteryID",
-          "caption": "Live Batterie-Leistung (W, optional eigene Variable)",
-          "validVariableTypes": [
-            1,
-            2
-          ],
-          "width": "420px"
         },
         {
           "type": "NumberSpinner",
@@ -528,7 +535,8 @@
     {
       "type": "NumberSpinner",
       "name": "ArchiveControlID",
-      "caption": "Archivsteuerung-ID (0 = automatisch suchen)"
+      "caption": "Archivsteuerung-ID (0 = automatisch suchen)",
+      "items": []
     },
     {
       "type": "Select",
@@ -547,7 +555,8 @@
           "caption": "1 Minute",
           "value": 6
         }
-      ]
+      ],
+      "items": []
     },
     {
       "type": "Select",
@@ -566,22 +575,26 @@
           "caption": "1 Minute",
           "value": 6
         }
-      ]
+      ],
+      "items": []
     },
     {
       "type": "NumberSpinner",
       "name": "RefreshSeconds",
-      "caption": "Aktualisierung alle x Sekunden"
+      "caption": "Aktualisierung alle x Sekunden",
+      "items": []
     },
     {
       "type": "NumberSpinner",
       "name": "MaxSourcePoints",
-      "caption": "Max. Punkte Stromquellen-Chart"
+      "caption": "Max. Punkte Stromquellen-Chart",
+      "items": []
     },
     {
       "type": "NumberSpinner",
       "name": "MaxUsagePoints",
-      "caption": "Max. Punkte Stromnutzung-Chart"
+      "caption": "Max. Punkte Stromnutzung-Chart",
+      "items": []
     }
   ],
   "actions": [
