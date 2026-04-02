@@ -63,6 +63,7 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyBoolean('ShowPeakValues', false);
         $this->RegisterPropertyBoolean('ShowPeakTimestamps', false);
         $this->RegisterPropertyBoolean('ShowPeakTimestampsLong', false);
+        $this->RegisterPropertyBoolean('ShowPeakMarkersPvLoad', false);
 
         $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
@@ -1025,6 +1026,34 @@ class EnergyDashboard extends IPSModule
         return $this->GetPeakValuesFromArchive($archiveID, $rangeStart, $rangeEnd);
     }
 
+
+    private function GetVisibleChartPeakMarkers(array $data): array
+    {
+        $result = [
+            'pv' => ['index' => null, 'value' => 0.0, 'label' => 'PV Max'],
+            'load' => ['index' => null, 'value' => 0.0, 'label' => 'Verbrauch Max']
+        ];
+
+        if (!$this->ReadPropertyBoolean('ShowPeakMarkersPvLoad')) {
+            return $result;
+        }
+
+        foreach (['pv' => 'pv', 'load' => 'load'] as $target => $key) {
+            if (!isset($data[$key]) || !is_array($data[$key]) || count($data[$key]) === 0) {
+                continue;
+            }
+            $vals = array_map('floatval', $data[$key]);
+            $maxVal = max($vals);
+            $maxIdx = array_search($maxVal, $vals, true);
+            if ($maxIdx !== false) {
+                $result[$target]['index'] = (int) $maxIdx;
+                $result[$target]['value'] = round((float) $maxVal, 2);
+            }
+        }
+
+        return $result;
+    }
+
     private function FormatPeakValue($peak): string
     {
         if (is_array($peak)) {
@@ -1851,15 +1880,42 @@ class EnergyDashboard extends IPSModule
         $theme = $this->GetThemeConfig();
         $unit = $data['unit'] ?? 'kW';
         $chartType = $data['chartType'] ?? 'line';
-        $json = json_encode(['labels' => $data['labels'], 'pv' => $data['pv'], 'grid' => $data['grid'], 'load' => $data['load'], 'battery' => $data['battery'], 'soc' => $data['soc'] ?? []], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $chartPayload = [
+            'labels' => $data['labels'],
+            'pv' => $data['pv'],
+            'grid' => $data['grid'],
+            'load' => $data['load'],
+            'battery' => $data['battery'],
+            'soc' => $data['soc'] ?? []
+        ];
+        $json = json_encode($chartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $markerJson = json_encode($this->GetVisibleChartPeakMarkers($chartPayload), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $showMarkers = $this->ReadPropertyBoolean('ShowPeakMarkersPvLoad') ? 'true' : 'false';
         $height = max(220, min(420, 220 + (int) floor(count($data['labels']) / 4)));
         $labelEsc = htmlspecialchars($label);
+        $unitEsc = htmlspecialchars($unit);
+        $typeEsc = htmlspecialchars($chartType);
+
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
             . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-title{font-size:24px;font-weight:700;margin-bottom:2px}.edb-sub{font-size:13px;color:' . $theme['muted'] . ';margin-bottom:8px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
             . '<div class="edb-card"><div class="edb-title">Stromquellen</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbSourceChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-            . '<script>(function(){const d=' . $json . ';const theme=' . $themeJson . ';new Chart(document.getElementById("edbSourceChart"),{type:"' . $chartType . '",data:{labels:d.labels,datasets:[{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:.25,pointRadius:0,borderWidth:2},{label:"Netz",data:d.grid,borderColor:theme.grid,backgroundColor:theme.gridFill,fill:false,tension:.2,pointRadius:0,borderWidth:2},{label:"Verbrauch",data:d.load,borderColor:"#000000",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},{label:"Batterie",data:d.battery,borderColor:theme.battery,backgroundColor:theme.batteryFill,tension:.15,pointRadius:0,borderWidth:2.5}].concat((Array.isArray(d.soc)&&d.soc.length>0)?[{label:"SoC",data:d.soc,borderColor:theme.soc,backgroundColor:theme.socFill,borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"}]:[])},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}}},scales:{y:{ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"kW",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}}});})();</script>'
+            . '<script>(function(){'
+            . 'const d=' . $json . ';'
+            . 'const theme=' . $themeJson . ';'
+            . 'const markers=' . $markerJson . ';'
+            . 'const showMarkers=' . $showMarkers . ';'
+            . 'const datasets=['
+            . '{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:.25,pointRadius:0,borderWidth:2},'
+            . '{label:"Netz",data:d.grid,borderColor:theme.grid,backgroundColor:theme.gridFill,fill:false,tension:.2,pointRadius:0,borderWidth:2},'
+            . '{label:"Verbrauch",data:d.load,borderColor:"#000000",backgroundColor:"rgba(0,0,0,.10)",borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
+            . '{label:"Batterie",data:d.battery,borderColor:theme.battery,backgroundColor:theme.batteryFill,fill:false,tension:.15,pointRadius:0,borderWidth:2.5}'
+            . '];'
+            . 'if(Array.isArray(d.soc)&&d.soc.length>0){datasets.push({label:"SoC",data:d.soc,borderColor:theme.soc,backgroundColor:theme.socFill,borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"});}'
+            . 'const peakPlugin={id:"pvLoadPeakPlugin",afterDatasetsDraw(chart){if(!showMarkers){return;}const ctx=chart.ctx;ctx.save();function drawMarker(datasetIndex, marker, color){if(!marker||marker.index===null||marker.index===undefined){return;}const meta=chart.getDatasetMeta(datasetIndex);if(!meta||!meta.data||!meta.data[marker.index]){return;}const point=meta.data[marker.index];const x=point.x;const y=point.y;ctx.beginPath();ctx.arc(x,y,6,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=2;ctx.strokeStyle="#ffffff";ctx.stroke();const text=marker.label+": "+Number(marker.value).toFixed(2)+" kW";ctx.font="12px Arial";const tw=ctx.measureText(text).width;ctx.fillStyle="rgba(255,255,255,0.88)";ctx.fillRect(x+8,y-22,tw+8,16);ctx.fillStyle=color;ctx.textAlign="left";ctx.textBaseline="bottom";ctx.fillText(text,x+12,y-8);}drawMarker(0,markers.pv,theme.pv);drawMarker(2,markers.load,theme.house);ctx.restore();}};'
+            . 'new Chart(document.getElementById("edbSourceChart"),{type:"' . $typeEsc . '",data:{labels:d.labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}}},scales:{y:{ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"' . $unitEsc . '",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}},plugins:[peakPlugin]});'
+            . '})();</script>'
             . '</div>';
     }
 
