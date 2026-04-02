@@ -344,6 +344,11 @@
           "caption": "Zeitstempel auch bei Monat/Jahr anzeigen"
         },
         {
+          "type": "CheckBox",
+          "name": "ShowPeakMarkersPvLoad",
+          "caption": "PV- und Verbrauchs-Peaks im Stromquellen-Chart anzeigen"
+        },
+        {
           "type": "Label",
           "caption": "Verwendet Leistungswerte (Watt) aus dem Archiv. Max/Min je Zeitraum."
         }
