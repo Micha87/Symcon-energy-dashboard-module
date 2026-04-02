@@ -349,6 +349,11 @@
           "caption": "PV- und Verbrauchs-Peaks im Stromquellen-Chart anzeigen"
         },
         {
+          "type": "CheckBox",
+          "name": "EnablePeakHoverDebug",
+          "caption": "Peak-Hover-Highlight aktivieren (Debug)"
+        },
+        {
           "type": "Label",
           "caption": "Verwendet Leistungswerte (Watt) aus dem Archiv. Max/Min je Zeitraum."
         }
