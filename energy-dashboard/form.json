@@ -356,6 +356,16 @@
         {
           "type": "Label",
           "caption": "Verwendet Leistungswerte (Watt) aus dem Archiv. Max/Min je Zeitraum."
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowBalanceBadge",
+          "caption": "Saldo-Badge oben rechts anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ColorBalanceBadgeByState",
+          "caption": "Saldo-Badge nach Zustand einfärben"
         }
       ]
     },
