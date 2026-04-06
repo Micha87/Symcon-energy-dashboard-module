@@ -934,76 +934,28 @@ class EnergyDashboard extends IPSModule
             return in_array($mode, ['day', 'week'], true) ? date('d.m H:i', $ts) : date('d.m.Y', $ts);
         };
 
-        $getPeak = function (int $varID, bool $invert, bool $useMin = false, bool $positiveOnly = false) use ($archiveID, $rangeStart, $rangeEnd, $mode): array {
+        $getAggregationLevel = function () use ($mode): int {
+            switch ($mode) {
+                case 'day':
+                    return 1; // tägliche Aggregation
+                case 'week':
+                    return 2; // wöchentliche Aggregation
+                case 'month':
+                    return 3; // monatliche Aggregation
+                case 'year':
+                    return 4; // jährliche Aggregation
+                default:
+                    return 1;
+            }
+        };
+
+        $getPeak = function (int $varID, bool $invert, bool $useMin = false, bool $positiveOnly = false) use ($archiveID, $rangeStart, $rangeEnd, $getAggregationLevel): array {
             if (!$this->IsValidVar($varID)) {
                 return ['value' => 0.0, 'timestamp' => 0];
             }
 
-            // Tagesansicht:
-            // AC_GetAggregatedValues(..., 1, ...) und dabei Max/MaxTime bzw. Min/MinTime nutzen.
-            if ($mode === 'day') {
-                $rows = @AC_GetAggregatedValues($archiveID, $varID, 1, $rangeStart, $rangeEnd, 0);
-                if (!is_array($rows)) {
-                    $rows = [];
-                }
-
-                $bestVal = $useMin ? INF : -INF;
-                $bestTs = 0;
-
-                foreach ($rows as $row) {
-                    if ($useMin) {
-                        if (!isset($row['Min'])) {
-                            continue;
-                        }
-                        $val = (float) $row['Min'];
-                        $ts = isset($row['MinTime']) ? (int) $row['MinTime'] : (isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0);
-                    } else {
-                        if (!isset($row['Max'])) {
-                            continue;
-                        }
-                        $val = (float) $row['Max'];
-                        $ts = isset($row['MaxTime']) ? (int) $row['MaxTime'] : (isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0);
-                    }
-
-                    $val = $this->ApplySign($val, $invert);
-                    if ($positiveOnly) {
-                        $val = max(0.0, $val);
-                    }
-
-                    if ($useMin) {
-                        if ($val < $bestVal) {
-                            $bestVal = $val;
-                            $bestTs = $ts;
-                        }
-                    } else {
-                        if ($val > $bestVal) {
-                            $bestVal = $val;
-                            $bestTs = $ts;
-                        }
-                    }
-                }
-
-                if ($bestVal === INF || $bestVal === -INF) {
-                    $bestVal = 0.0;
-                    $bestTs = 0;
-                }
-
-                return ['value' => round($bestVal / 1000.0, 2), 'timestamp' => $bestTs];
-            }
-
-            $rangeSeconds = max(1, $rangeEnd - $rangeStart);
-            $aggregation = 0;
-            if ($rangeSeconds > 7 * 86400 && $rangeSeconds <= 120 * 86400) {
-                $aggregation = 1;
-            } elseif ($rangeSeconds > 120 * 86400) {
-                $aggregation = 2;
-            }
-
-            if ($aggregation === 0) {
-                $rows = @AC_GetLoggedValues($archiveID, $varID, $rangeStart, $rangeEnd, 10000);
-            } else {
-                $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $rangeStart, $rangeEnd, 0);
-            }
+            $aggregation = $getAggregationLevel();
+            $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $rangeStart, $rangeEnd, 0);
             if (!is_array($rows)) {
                 $rows = [];
             }
@@ -1012,26 +964,18 @@ class EnergyDashboard extends IPSModule
             $bestTs = 0;
 
             foreach ($rows as $row) {
-                if ($aggregation === 0) {
-                    if (!isset($row['Value'])) {
+                if ($useMin) {
+                    if (!isset($row['Min'])) {
                         continue;
                     }
-                    $val = (float) $row['Value'];
-                    $ts = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
+                    $val = (float) $row['Min'];
+                    $ts = isset($row['MinTime']) ? (int) $row['MinTime'] : (isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0);
                 } else {
-                    if ($useMin) {
-                        if (!isset($row['Min'])) {
-                            continue;
-                        }
-                        $val = (float) $row['Min'];
-                        $ts = isset($row['MinTime']) ? (int) $row['MinTime'] : (isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0);
-                    } else {
-                        if (!isset($row['Max'])) {
-                            continue;
-                        }
-                        $val = (float) $row['Max'];
-                        $ts = isset($row['MaxTime']) ? (int) $row['MaxTime'] : (isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0);
+                    if (!isset($row['Max'])) {
+                        continue;
                     }
+                    $val = (float) $row['Max'];
+                    $ts = isset($row['MaxTime']) ? (int) $row['MaxTime'] : (isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0);
                 }
 
                 $val = $this->ApplySign($val, $invert);
