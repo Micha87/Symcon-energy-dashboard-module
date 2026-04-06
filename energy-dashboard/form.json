@@ -344,8 +344,28 @@
           "caption": "Zeitstempel auch bei Monat/Jahr anzeigen"
         },
         {
+          "type": "CheckBox",
+          "name": "ShowPeakMarkersPvLoad",
+          "caption": "PV- und Verbrauchs-Peaks im Stromquellen-Chart anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "EnablePeakHoverDebug",
+          "caption": "Peak-Hover-Highlight aktivieren (Debug)"
+        },
+        {
           "type": "Label",
           "caption": "Verwendet Leistungswerte (Watt) aus dem Archiv. Max/Min je Zeitraum."
+        },
+        {
+          "type": "CheckBox",
+          "name": "ShowBalanceBadge",
+          "caption": "Saldo-Badge oben rechts anzeigen"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ColorBalanceBadgeByState",
+          "caption": "Saldo-Badge nach Zustand einfärben"
         }
       ]
     },
