@@ -1996,6 +1996,7 @@ class EnergyDashboard extends IPSModule
     {
         $theme = $this->GetThemeConfig();
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $height = max(220, min(460, 220 + (int) floor(count($data) * 5)));
         $labelEsc = htmlspecialchars($label);
 
@@ -2039,7 +2040,7 @@ class EnergyDashboard extends IPSModule
             . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px}.edb-title{font-size:24px;font-weight:700}.edb-sub{font-size:13px;color:' . $theme['muted'] . ';margin-bottom:8px}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;border:1px solid ' . $theme['border'] . ';border-radius:14px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
             . '<div class="edb-card"><div class="edb-head"><div class="edb-title">Stromnutzung</div>' . $badgeHtml . '</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbUsageChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-            . '<script>(function(){const d=' . $json . ';const theme=' . json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';new Chart(document.getElementById("edbUsageChart"),{type:"bar",data:{labels:d.map(x=>x.label),datasets:['
+            . '<script>(function(){const d=' . $json . ';const theme=' . $themeJson . ';new Chart(document.getElementById("edbUsageChart"),{type:"bar",data:{labels:d.map(x=>x.label),datasets:['
             . '{label:"PV → Last",data:d.map(x=>x.pvToLoad),backgroundColor:"rgba(255,193,7,.55)",borderColor:"rgba(255,152,0,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Netzbezug",data:d.map(x=>x.gridImport),backgroundColor:"rgba(128,203,196,.75)",borderColor:"rgba(77,182,172,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Batt. Entladen",data:d.map(x=>x.batteryDischarge),backgroundColor:"rgba(100,181,246,.75)",borderColor:"rgba(66,165,245,1)",borderWidth:1,stack:"energy"},'
