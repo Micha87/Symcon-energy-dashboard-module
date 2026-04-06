@@ -689,8 +689,17 @@ class EnergyDashboard extends IPSModule
 
     private function GetBatteryContentDeltaKwh(int $archiveID, int $rangeStart, int $rangeEnd): float
     {
-        $dayTotals = $this->ResolveSingleDayTotals($archiveID, strtotime(date('Y-m-d 00:00:00', $rangeStart)));
-        return round((float) $dayTotals['batteryCharge'] - (float) $dayTotals['batteryDischarge'], 3);
+        $startDay = strtotime(date('Y-m-d 00:00:00', $rangeStart));
+        $sumCharge = 0.0;
+        $sumDischarge = 0.0;
+
+        for ($day = $startDay; $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
+            $dayTotals = $this->ResolveSingleDayTotals($archiveID, $day);
+            $sumCharge += (float) ($dayTotals['batteryCharge'] ?? 0.0);
+            $sumDischarge += (float) ($dayTotals['batteryDischarge'] ?? 0.0);
+        }
+
+        return round($sumCharge - $sumDischarge, 3);
     }
 
     private function ReadLoggedValueAtOrBefore(int $archiveID, int $varID, int $timestamp): ?float
@@ -755,8 +764,9 @@ class EnergyDashboard extends IPSModule
 
         $totals['batteryDeltaKwh'] = round((float) $totals['batteryCharge'] - (float) $totals['batteryDischarge'], 2);
         $correctedOutput = $totals['batteryDischarge'] + $totals['batteryDeltaKwh'];
-        $totals['batteryContentNowKwh'] = ($archiveID > 0 && $rangeEnd > 0)
-            ? $this->GetBatteryContentNowKwh($archiveID, $rangeEnd)
+        $effectiveContentTs = ($rangeEnd > 0) ? min(time(), max($rangeStart, $rangeEnd - 1)) : 0;
+        $totals['batteryContentNowKwh'] = ($archiveID > 0 && $effectiveContentTs > 0)
+            ? $this->GetBatteryContentNowKwh($archiveID, $effectiveContentTs)
             : 0.0;
         $totals['batteryDeltaDirection'] = ($batteryDeltaKwh > 0.01) ? 'positiv' : (($batteryDeltaKwh < -0.01) ? 'negativ' : 'neutral');
         $totals['batteryCycles'] = ($archiveID > 0 && $rangeStart > 0 && $rangeEnd > 0)
@@ -1984,22 +1994,58 @@ class EnergyDashboard extends IPSModule
 
     private function GetUsageHtml(array $data, array $totals, string $label): string
     {
+        $theme = $this->GetThemeConfig();
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $height = max(220, min(460, 220 + (int) floor(count($data) * 5)));
         $labelEsc = htmlspecialchars($label);
-        $badge = '+' . $this->Fmt((float) $totals['netUsage']) . ' kWh';
 
-        return '<div style="font-family:Arial,sans-serif;padding:12px;color:#222;">'
-            . '<style>.edb-card{background:#f7f7f7;border:1px solid #d9d9d9;border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px}.edb-title{font-size:24px;font-weight:700}.edb-sub{font-size:13px;color:#666;margin-bottom:8px}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:#fff;border:1px solid #d0d0d0;border-radius:14px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
-            . '<div class="edb-card"><div class="edb-head"><div class="edb-title">Stromnutzung</div><div class="edb-badge">' . $badge . '</div></div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbUsageChart"></canvas></div></div>'
+        $balance = round((float) ($totals['pv'] ?? 0.0) - (float) ($totals['load'] ?? 0.0), 2);
+        $prefix = ($balance > 0) ? '+' : '';
+
+        $badgeBg = $theme['card'];
+        $badgeText = $theme['text'];
+        $badgeBorder = $theme['border'];
+
+        if ($this->ReadPropertyBoolean('ColorBalanceBadgeByState')) {
+            if ($balance > 0.001) {
+                $badgeBg = ($theme['mode'] === 'dark' || $theme['bg'] === 'transparent') ? 'rgba(76,175,80,0.18)' : 'rgba(76,175,80,0.14)';
+                $badgeText = '#4caf50';
+                $badgeBorder = 'rgba(76,175,80,0.35)';
+            } elseif ($balance < -0.001) {
+                $badgeBg = ($theme['mode'] === 'dark' || $theme['bg'] === 'transparent') ? 'rgba(244,67,54,0.18)' : 'rgba(244,67,54,0.12)';
+                $badgeText = '#f44336';
+                $badgeBorder = 'rgba(244,67,54,0.35)';
+            }
+        } else {
+            if ($theme['mode'] === 'dark' || $theme['bg'] === 'transparent') {
+                $badgeBg = 'rgba(255,255,255,0.08)';
+                $badgeText = '#ffffff';
+                $badgeBorder = 'rgba(255,255,255,0.16)';
+            } else {
+                $badgeBg = '#ffffff';
+                $badgeText = '#333333';
+                $badgeBorder = $theme['border'];
+            }
+        }
+
+        $badgeHtml = '';
+        if ($this->ReadPropertyBoolean('ShowBalanceBadge')) {
+            $badgeHtml = '<div class="edb-badge" style="background:' . $badgeBg . ';color:' . $badgeText . ';border-color:' . $badgeBorder . ';">'
+                . $prefix . $this->Fmt($balance) . ' kWh'
+                . '</div>';
+        }
+
+        return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
+            . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px}.edb-title{font-size:24px;font-weight:700}.edb-sub{font-size:13px;color:' . $theme['muted'] . ';margin-bottom:8px}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;border:1px solid ' . $theme['border'] . ';border-radius:14px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
+            . '<div class="edb-card"><div class="edb-head"><div class="edb-title">Stromnutzung</div>' . $badgeHtml . '</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbUsageChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-            . '<script>(function(){const d=' . $json . ';new Chart(document.getElementById("edbUsageChart"),{type:"bar",data:{labels:d.map(x=>x.label),datasets:['
+            . '<script>(function(){const d=' . $json . ';const theme=' . json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';new Chart(document.getElementById("edbUsageChart"),{type:"bar",data:{labels:d.map(x=>x.label),datasets:['
             . '{label:"PV → Last",data:d.map(x=>x.pvToLoad),backgroundColor:"rgba(255,193,7,.55)",borderColor:"rgba(255,152,0,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Netzbezug",data:d.map(x=>x.gridImport),backgroundColor:"rgba(128,203,196,.75)",borderColor:"rgba(77,182,172,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Batt. Entladen",data:d.map(x=>x.batteryDischarge),backgroundColor:"rgba(100,181,246,.75)",borderColor:"rgba(66,165,245,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Batt. Laden",data:d.map(x=>-x.batteryCharge),backgroundColor:"rgba(244,143,177,.72)",borderColor:"rgba(236,64,122,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Netzeinspeisung",data:d.map(x=>-x.gridExport),backgroundColor:"rgba(179,157,219,.72)",borderColor:"rgba(126,87,194,1)",borderWidth:1,stack:"energy"}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top"}},scales:{y:{title:{display:true,text:"kWh"},stacked:true},x:{stacked:true,ticks:{maxRotation:0,minRotation:0,autoSkip:true,maxTicksLimit:16}}}}});})();</script>'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}},tooltip:{backgroundColor:(theme.mode==="dark"||theme.bg==="transparent")?"rgba(24,24,24,0.96)":"rgba(255,255,255,0.96)",titleColor:(theme.mode==="dark"||theme.bg==="transparent")?"#f2f2f2":"#111111",bodyColor:(theme.mode==="dark"||theme.bg==="transparent")?"#f2f2f2":"#111111",borderColor:(theme.mode==="dark"||theme.bg==="transparent")?"rgba(255,255,255,0.16)":"rgba(0,0,0,0.12)",borderWidth:1,padding:10,displayColors:true,boxPadding:4}},scales:{x:{stacked:true,ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.12)"}},y:{stacked:true,ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.12)"},title:{display:true,text:"kWh",color:theme.text}}}});})();</script>'
             . '</div>';
     }
 
