@@ -65,6 +65,8 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyBoolean('ShowPeakTimestampsLong', false);
         $this->RegisterPropertyBoolean('ShowPeakMarkersPvLoad', false);
         $this->RegisterPropertyBoolean('EnablePeakHoverDebug', false);
+        $this->RegisterPropertyBoolean('EnablePeakFineResolution', false);
+        $this->RegisterPropertyInteger('PeakFineSeconds', 15);
         $this->RegisterPropertyBoolean('ShowBalanceBadge', true);
         $this->RegisterPropertyBoolean('ColorBalanceBadgeByState', true);
 
@@ -321,6 +323,7 @@ class EnergyDashboard extends IPSModule
         $totals      = $this->ResolveTotalsForRange($archiveID, $rangeStart, $rangeEnd, $sourceChart);
         $targetComparison = $this->GetTargetComparisonTotals($archiveID, $rangeStart, $rangeEnd, $totals);
         $peakValues = $this->GetPeakValues($archiveID, $rangeStart, $rangeEnd);
+        $sourceChart = $this->ApplyFineResolutionAroundPeaks($archiveID, $sourceChart, $peakValues);
 
         $this->SetValue(self::IDENT_OVERVIEW, $this->GetOverviewHtml($totals, $targetComparison, $peakValues));
         $this->SetValue(self::IDENT_SOURCES, $this->GetSourcesHtml($sourceChart, $label, $peakValues));
@@ -921,6 +924,129 @@ class EnergyDashboard extends IPSModule
     }
 
 
+
+    private function FindTimestampIndex(array $timestamps, int $targetTs): ?int
+    {
+        if (count($timestamps) === 0) {
+            return null;
+        }
+        $bestIdx = null;
+        $bestDiff = PHP_INT_MAX;
+        foreach ($timestamps as $i => $ts) {
+            $diff = abs((int) $ts - $targetTs);
+            if ($diff < $bestDiff) {
+                $bestDiff = $diff;
+                $bestIdx = (int) $i;
+            }
+        }
+        return $bestIdx;
+    }
+
+    private function GetPeakContextSeriesKw(int $archiveID, int $varId, int $peakTs, int $seconds, bool $invert): array
+    {
+        if (!$this->IsValidVar($varId) || $peakTs <= 0) {
+            return [];
+        }
+        $from = max(0, $peakTs - $seconds);
+        $to = $peakTs + $seconds;
+        $rows = @AC_GetLoggedValues($archiveID, $varId, $from, $to, 0);
+        if (!is_array($rows)) {
+            return [];
+        }
+        $series = [];
+        foreach ($rows as $row) {
+            if (!isset($row['Value'], $row['TimeStamp'])) {
+                continue;
+            }
+            $series[(int) $row['TimeStamp']] = round($this->ApplySign((float) $row['Value'], $invert) / 1000.0, 3);
+        }
+        ksort($series);
+        return $series;
+    }
+
+    private function ApplyFineResolutionAroundPeaks(int $archiveID, array $sourceChart, array $peakValues): array
+    {
+        if (!$this->ReadPropertyBoolean('EnablePeakFineResolution')) {
+            return $sourceChart;
+        }
+        $mode = $this->ReadAttributeString('PeriodMode');
+        if ($mode !== 'day' && $mode !== 'week') {
+            return $sourceChart;
+        }
+        if (!isset($sourceChart['timestamps']) || !is_array($sourceChart['timestamps'])) {
+            return $sourceChart;
+        }
+
+        $seconds = max(5, (int) $this->ReadPropertyInteger('PeakFineSeconds'));
+        $extra = [
+            'pv' => [],
+            'grid' => [],
+            'load' => [],
+            'battery' => []
+        ];
+
+        foreach (['pv', 'load'] as $key) {
+            $peakTs = (int) (($peakValues[$key]['timestamp'] ?? 0));
+            if ($peakTs <= 0) {
+                continue;
+            }
+            $extra['pv'] += $this->GetPeakContextSeriesKw($archiveID, $this->ReadPropertyInteger('PvPowerID'), $peakTs, $seconds, $this->ReadPropertyBoolean('InvertPv'));
+            $extra['grid'] += $this->GetPeakContextSeriesKw($archiveID, $this->ReadPropertyInteger('GridPowerID'), $peakTs, $seconds, $this->ReadPropertyBoolean('InvertGrid'));
+            $extra['load'] += $this->GetPeakContextSeriesKw($archiveID, $this->ReadPropertyInteger('LoadPowerID'), $peakTs, $seconds, $this->ReadPropertyBoolean('InvertLoad'));
+            $extra['battery'] += $this->GetPeakContextSeriesKw($archiveID, $this->ReadPropertyInteger('BatteryPowerID'), $peakTs, $seconds, $this->ReadPropertyBoolean('InvertBattery'));
+        }
+
+        if (count($extra['pv']) === 0 && count($extra['load']) == 0) {
+            return $sourceChart;
+        }
+
+        $base = [];
+        foreach (($sourceChart['timestamps'] ?? []) as $i => $ts) {
+            $base[(int) $ts] = [
+                'label' => $sourceChart['labels'][$i] ?? date('d.m H:i', (int) $ts),
+                'pv' => (float) ($sourceChart['pv'][$i] ?? 0.0),
+                'grid' => (float) ($sourceChart['grid'][$i] ?? 0.0),
+                'load' => (float) ($sourceChart['load'][$i] ?? 0.0),
+                'battery' => (float) ($sourceChart['battery'][$i] ?? 0.0),
+            ];
+        }
+
+        foreach ($extra['pv'] as $ts => $val) {
+            if (!isset($base[$ts])) {
+                $base[$ts] = ['label' => date('d.m H:i:s', (int) $ts), 'pv' => 0.0, 'grid' => 0.0, 'load' => 0.0, 'battery' => 0.0];
+            }
+            $base[$ts]['pv'] = (float) ($extra['pv'][$ts] ?? $base[$ts]['pv']);
+            if (isset($extra['grid'][$ts])) {
+                $base[$ts]['grid'] = (float) $extra['grid'][$ts];
+            }
+            if (isset($extra['load'][$ts])) {
+                $base[$ts]['load'] = (float) $extra['load'][$ts];
+            }
+            if (isset($extra['battery'][$ts])) {
+                $base[$ts]['battery'] = (float) $extra['battery'][$ts];
+            }
+            $base[$ts]['label'] = date('H:i:s', (int) $ts);
+        }
+
+        ksort($base);
+        $rebuilt = ['timestamps' => [], 'labels' => [], 'pv' => [], 'grid' => [], 'load' => [], 'battery' => []];
+        foreach ($base as $ts => $row) {
+            $rebuilt['timestamps'][] = (int) $ts;
+            $rebuilt['labels'][] = $row['label'];
+            $rebuilt['pv'][] = round((float) $row['pv'], 3);
+            $rebuilt['grid'][] = round((float) $row['grid'], 3);
+            $rebuilt['load'][] = round((float) $row['load'], 3);
+            $rebuilt['battery'][] = round((float) $row['battery'], 3);
+        }
+
+        if (isset($sourceChart['soc'])) {
+            $rebuilt['soc'] = $sourceChart['soc'];
+        }
+        $rebuilt['unit'] = $sourceChart['unit'] ?? 'kW';
+        $rebuilt['chartType'] = $sourceChart['chartType'] ?? 'line';
+        return $rebuilt;
+    }
+
     private function GetPeakValuesFromArchive(int $archiveID, int $rangeStart, int $rangeEnd): array
     {
         $mode = $this->ReadAttributeString('PeriodMode');
@@ -1068,15 +1194,15 @@ class EnergyDashboard extends IPSModule
         $gridImport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), false, true);
         $gridExport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), true, false);
         $batteryCharge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), true, false);
-        $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, false);
+        $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, true);
 
         return [
             'pv' => ['value' => max(0.0, $pv['value']), 'timestamp' => $showTimestamp ? $pv['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($pv['timestamp']) : ''],
             'load' => ['value' => max(0.0, $load['value']), 'timestamp' => $showTimestamp ? $load['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($load['timestamp']) : ''],
             'gridImport' => ['value' => max(0.0, $gridImport['value']), 'timestamp' => $showTimestamp ? $gridImport['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($gridImport['timestamp']) : ''],
             'gridExport' => ['value' => abs(min(0.0, $gridExport['value'])), 'timestamp' => $showTimestamp ? $gridExport['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($gridExport['timestamp']) : ''],
-            'batteryCharge' => ['value' => abs(min(0.0, $batteryCharge['value'])), 'timestamp' => $showTimestamp ? $batteryCharge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($batteryCharge['timestamp']) : ''],
-            'batteryDischarge' => ['value' => max(0.0, $batteryDischarge['value']), 'timestamp' => $showTimestamp ? $batteryDischarge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($batteryDischarge['timestamp']) : '']
+            'batteryCharge' => ['value' => abs((float) ($batteryCharge['value'] ?? 0.0)), 'timestamp' => $showTimestamp ? $batteryCharge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($batteryCharge['timestamp']) : ''],
+            'batteryDischarge' => ['value' => max(0.0, (float) ($batteryDischarge['value'] ?? 0.0)), 'timestamp' => $showTimestamp ? $batteryDischarge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($batteryDischarge['timestamp']) : '']
         ];
     }
 
