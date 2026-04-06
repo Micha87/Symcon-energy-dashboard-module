@@ -1996,6 +1996,7 @@ class EnergyDashboard extends IPSModule
     {
         $theme = $this->GetThemeConfig();
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $height = max(220, min(460, 220 + (int) floor(count($data) * 5)));
         $labelEsc = htmlspecialchars($label);
 
@@ -2029,13 +2030,13 @@ class EnergyDashboard extends IPSModule
             . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px}.edb-title{font-size:24px;font-weight:700}.edb-sub{font-size:13px;color:' . $theme['muted'] . ';margin-bottom:8px}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;border-radius:14px}.edb-wrap{position:relative;height:' . $height . 'px}</style>'
             . '<div class="edb-card"><div class="edb-head"><div class="edb-title">Stromnutzung</div>' . $badgeHtml . '</div><div class="edb-sub">' . $labelEsc . '</div><div class="edb-wrap"><canvas id="edbUsageChart"></canvas></div></div>'
             . '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
-            . '<script>(function(){const d=' . $json . ';new Chart(document.getElementById("edbUsageChart"),{type:"bar",data:{labels:d.map(x=>x.label),datasets:['
+            . '<script>(function(){const d=' . $json . ';const theme=' . $themeJson . ';new Chart(document.getElementById("edbUsageChart"),{type:"bar",data:{labels:d.map(x=>x.label),datasets:['
             . '{label:"PV → Last",data:d.map(x=>x.pvToLoad),backgroundColor:"rgba(255,193,7,.55)",borderColor:"rgba(255,152,0,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Netzbezug",data:d.map(x=>x.gridImport),backgroundColor:"rgba(128,203,196,.75)",borderColor:"rgba(77,182,172,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Batt. Entladen",data:d.map(x=>x.batteryDischarge),backgroundColor:"rgba(100,181,246,.75)",borderColor:"rgba(66,165,245,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Batt. Laden",data:d.map(x=>-x.batteryCharge),backgroundColor:"rgba(244,143,177,.72)",borderColor:"rgba(236,64,122,1)",borderWidth:1,stack:"energy"},'
             . '{label:"Netzeinspeisung",data:d.map(x=>-x.gridExport),backgroundColor:"rgba(179,157,219,.72)",borderColor:"rgba(126,87,194,1)",borderWidth:1,stack:"energy"}'
-            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:' + '$theme[\'text\']' + '}} ,scales:{y:{title:{display:true,text:"kWh"},stacked:true,ticks:{color:' + '$theme[\'text\']' + '}},x:{stacked:true,ticks:{maxRotation:0,minRotation:0,autoSkip:true,maxTicksLimit:16,color:' + json.dumps('#fff') + '}}}}});})();</script>'
+            . ']},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}},tooltip:{backgroundColor:(theme.mode==="dark"||theme.bg==="transparent")?"rgba(24,24,24,0.96)":"rgba(255,255,255,0.96)",titleColor:(theme.mode==="dark"||theme.bg==="transparent")?"#f2f2f2":"#111111",bodyColor:(theme.mode==="dark"||theme.bg==="transparent")?"#f2f2f2":"#111111",borderColor:(theme.mode==="dark"||theme.bg==="transparent")?"rgba(255,255,255,0.16)":"rgba(0,0,0,0.12)",borderWidth:1,padding:10,displayColors:true,boxPadding:4}},scales:{x:{stacked:true,ticks:{color:theme.text,maxRotation:0,minRotation:0,autoSkip:true,maxTicksLimit:16},grid:{color:"rgba(128,128,128,0.12)"}},y:{stacked:true,ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.12)"},title:{display:true,text:"kWh",color:theme.text}}}}});})();</script>'
             . '</div>';
     }
 
