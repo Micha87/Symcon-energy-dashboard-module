@@ -1065,7 +1065,7 @@ class EnergyDashboard extends IPSModule
         $gridImport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), false, true);
         $gridExport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), true, false);
         $batteryCharge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, false);
-        $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, false);
+        $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), true, false);
 
         return [
             'pv' => ['value' => max(0.0, (float) $pv['value']), 'timestamp' => $showTimestamp ? (int) $pv['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs((int) $pv['timestamp']) : ''],
