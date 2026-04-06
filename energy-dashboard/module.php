@@ -65,6 +65,8 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyBoolean('ShowPeakTimestampsLong', false);
         $this->RegisterPropertyBoolean('ShowPeakMarkersPvLoad', false);
         $this->RegisterPropertyBoolean('EnablePeakHoverDebug', false);
+        $this->RegisterPropertyBoolean('ShowBalanceBadge', true);
+        $this->RegisterPropertyBoolean('ColorBalanceBadgeByState', true);
 
         $this->RegisterPropertyString('ThemePreset', 'custom');
         $this->RegisterPropertyString('ThemeMode', 'light');
@@ -1648,11 +1650,64 @@ class EnergyDashboard extends IPSModule
             $bottomHtml = '<div class="edb-2col" style="margin-top:12px;">' . $peakHtml . $targetHtml . '</div>';
         }
 
+        $balance = round((float) ($t['pv'] ?? 0.0) - (float) ($t['load'] ?? 0.0), 2);
+        $badgeHtml = '';
+        if ($this->ReadPropertyBoolean('ShowBalanceBadge')) {
+            $badgeBg = $theme['card'];
+            $badgeText = $theme['text'];
+            $badgeBorder = $theme['border'];
+
+            if ($this->ReadPropertyBoolean('ColorBalanceBadgeByState')) {
+                if ($balance > 0.001) {
+                    $badgeBg = ($theme['mode'] === 'dark' || $theme['bg'] === 'transparent') ? 'rgba(76,175,80,0.18)' : 'rgba(76,175,80,0.14)';
+                    $badgeText = '#4caf50';
+                    $badgeBorder = 'rgba(76,175,80,0.35)';
+                } elseif ($balance < -0.001) {
+                    $badgeBg = ($theme['mode'] === 'dark' || $theme['bg'] === 'transparent') ? 'rgba(244,67,54,0.18)' : 'rgba(244,67,54,0.12)';
+                    $badgeText = '#f44336';
+                    $badgeBorder = 'rgba(244,67,54,0.35)';
+                }
+            } else {
+                if ($theme['mode'] === 'dark' || $theme['bg'] === 'transparent') {
+                    $badgeBg = 'rgba(255,255,255,0.08)';
+                    $badgeText = '#ffffff';
+                    $badgeBorder = 'rgba(255,255,255,0.16)';
+                } else {
+                    $badgeBg = '#ffffff';
+                    $badgeText = '#333333';
+                    $badgeBorder = $theme['border'];
+                }
+            }
+
+            $prefix = ($balance > 0) ? '+' : '';
+            $badgeHtml = '<div class="edb-badge" style="background:' . $badgeBg . ';color:' . $badgeText . ';border-color:' . $badgeBorder . ';">'
+                . $prefix . $this->Fmt($balance) . ' kWh'
+                . '</div>';
+        }
+
         return '<div style="font-family:Arial,sans-serif;padding:12px;color:' . $theme['text'] . ';background:' . $theme['bg'] . ';">'
-            . '<style>.edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.edb-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.edb-title{font-size:24px;font-weight:700}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;background:' . $theme['card'] . ';color:' . $theme['text'] . ';border:1px solid ' . $theme['border'] . ';border-radius:14px}.edb-box{background:' . $theme['card'] . ';border:1px solid ' . $theme['border'] . ';border-radius:12px;padding:12px}.edb-label{font-size:12px;color:' . $theme['muted'] . ';margin-bottom:4px}.edb-value{font-size:20px;font-weight:700}.edb-section{font-size:14px;font-weight:700;color:' . $theme['muted'] . ';margin-bottom:6px}</style>'
-            . '<div class="edb-card"><div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div><div class="edb-badge">+' . $this->Fmt((float) $t['netUsage']) . ' kWh</div></div>'
-            . '<div class="edb-grid">' . $this->OverviewBox('PV', $this->Fmt((float) $t['pv']) . ' kWh') . $this->OverviewBox('Bezug', $this->Fmt((float) $t['gridImport']) . ' kWh') . $this->OverviewBox('Einspeisung', $this->Fmt((float) $t['gridExport']) . ' kWh') . $this->OverviewBox('Verbrauch', $this->Fmt((float) $t['load']) . ' kWh') . '</div>'
-            . '<div class="edb-2col" style="margin-top:12px;"><div><div class="edb-section">Eigenverbrauch & Autarkie</div><div class="edb-grid">' . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh') . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %') . '</div></div><div><div class="edb-section">Batterie-Analyse</div><div class="edb-grid">' . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh') . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh') . $batteryExtra . '</div></div></div>' . $bottomHtml . '</div></div>';
+            . '<style>.edb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.edb-2col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}.edb-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.edb-title{font-size:24px;font-weight:700}.edb-badge{font-size:18px;font-weight:700;padding:10px 14px;color:' . $theme['text'] . ';border:1px solid ' . $theme['border'] . ';border-radius:14px}.edb-box{background:' . $theme['card'] . ';border:1px solid ' . $theme['border'] . ';border-radius:12px;padding:12px}.edb-label{font-size:12px;color:' . $theme['muted'] . ';margin-bottom:4px}.edb-value{font-size:20px;font-weight:700}.edb-section{font-size:14px;font-weight:700;color:' . $theme['muted'] . ';margin-bottom:6px}</style>'
+            . '<div class="edb-card">'
+            . '<div class="edb-head"><div class="edb-title">Verbrauchsübersicht</div>' . $badgeHtml . '</div>'
+            . '<div class="edb-grid">'
+            . $this->OverviewBox('PV', $this->Fmt((float) $t['pv']) . ' kWh')
+            . $this->OverviewBox('Bezug', $this->Fmt((float) $t['gridImport']) . ' kWh')
+            . $this->OverviewBox('Einspeisung', $this->Fmt((float) $t['gridExport']) . ' kWh')
+            . $this->OverviewBox('Verbrauch', $this->Fmt((float) $t['load']) . ' kWh')
+            . '</div>'
+            . '<div class="edb-2col" style="margin-top:12px;">'
+            . '<div><div class="edb-section">Eigenverbrauch & Autarkie</div><div class="edb-grid">'
+            . $this->OverviewBox('Eigenverbrauch', $this->Fmt((float) $t['selfConsumption']) . ' kWh')
+            . $this->OverviewBox('Autarkie', $this->Fmt((float) $t['autarky']) . ' %')
+            . '</div></div>'
+            . '<div><div class="edb-section">Batterie-Analyse</div><div class="edb-grid">'
+            . $this->OverviewBox('Batt. Laden', $this->Fmt((float) $t['batteryCharge']) . ' kWh')
+            . $this->OverviewBox('Batt. Entladen', $this->Fmt((float) $t['batteryDischarge']) . ' kWh')
+            . $batteryExtra
+            . '</div></div>'
+            . '</div>'
+            . $bottomHtml
+            . '</div></div>';
     }
 
     private function OverviewBox(string $label, string $value): string
