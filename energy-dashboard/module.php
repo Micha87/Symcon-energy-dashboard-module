@@ -1971,7 +1971,7 @@ class EnergyDashboard extends IPSModule
             . 'const enableHoverDebug=' . $enableHoverDebug . ';'
             . 'const hoverState={key:null};'
             . 'const datasets=['
-            . '{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:.25,pointRadius:0,borderWidth:2},'
+            . '{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:0,pointRadius:function(ctx){if(!Array.isArray(d.pv)||d.pv.length===0){return 0;}var maxVal=Math.max.apply(null,d.pv);return ctx.dataIndex===d.pv.indexOf(maxVal)?5:0;},pointHoverRadius:function(ctx){if(!Array.isArray(d.pv)||d.pv.length===0){return 0;}var maxVal=Math.max.apply(null,d.pv);return ctx.dataIndex===d.pv.indexOf(maxVal)?7:3;},pointBackgroundColor:theme.pv,pointBorderColor:"#ffffff",pointBorderWidth:1.5,borderWidth:2},'
             . '{label:"Netz",data:d.grid,borderColor:theme.grid,backgroundColor:theme.gridFill,fill:false,tension:.2,pointRadius:0,borderWidth:2},'
             . '{label:"Verbrauch",data:d.load,borderColor:(theme.mode==="dark" ? "#e0e0e0" : "#000000"),backgroundColor:(theme.mode==="dark" ? "rgba(224,224,224,.12)" : "rgba(0,0,0,.10)"),borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
             . '{label:"Batterie",data:d.battery,borderColor:theme.battery,backgroundColor:theme.batteryFill,fill:false,tension:.15,pointRadius:0,borderWidth:2.5}'
