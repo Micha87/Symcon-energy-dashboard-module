@@ -1803,8 +1803,7 @@ class EnergyDashboard extends IPSModule
 
         $gridImport = max(0.0, $grid);
         $gridExport = max(0.0, -$grid);
-        $battCharge = max(0.0, -$battery);
-        $battDischarge = max(0.0, $battery);
+        [$battCharge, $battDischarge] = $this->ResolveBatteryChargeDischargeKw($battery, $pv, $gridImport, $gridExport, $load);
 
         $pvRemaining = max(0.0, $pv - $gridExport);
         $pvToBattery = min($battCharge, $pvRemaining);
@@ -1825,6 +1824,24 @@ class EnergyDashboard extends IPSModule
             ['Netz', 'Haus', round($gridToLoad, 3)],
             ['Batterie', 'Haus', round($batteryToLoad, 3)]
         ];
+    }
+
+    private function ResolveBatteryChargeDischargeKw(float $battery, float $pv, float $gridImport, float $gridExport, float $load): array
+    {
+        $chargeDefault = max(0.0, -$battery);
+        $dischargeDefault = max(0.0, $battery);
+
+        $chargeReversed = max(0.0, $battery);
+        $dischargeReversed = max(0.0, -$battery);
+
+        $balanceDefault = abs(($pv + $gridImport + $dischargeDefault) - ($load + $gridExport + $chargeDefault));
+        $balanceReversed = abs(($pv + $gridImport + $dischargeReversed) - ($load + $gridExport + $chargeReversed));
+
+        if ($balanceReversed + 0.02 < $balanceDefault) {
+            return [$chargeReversed, $dischargeReversed];
+        }
+
+        return [$chargeDefault, $dischargeDefault];
     }
 
     private function GetSankeyTooltipMap(array $flows, float $total, string $unit): array
