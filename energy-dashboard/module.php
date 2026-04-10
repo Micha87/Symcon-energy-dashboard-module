@@ -403,6 +403,18 @@ class EnergyDashboard extends IPSModule
         return $value;
     }
 
+    private function GetEmptyEnergyTotals(): array
+    {
+        return [
+            'pv' => 0.0,
+            'gridImport' => 0.0,
+            'gridExport' => 0.0,
+            'load' => 0.0,
+            'batteryCharge' => 0.0,
+            'batteryDischarge' => 0.0
+        ];
+    }
+
     private function ResolveTotalsForRange(int $archiveID, int $rangeStart, int $rangeEnd, array $sourceChart): array
     {
         $mode = $this->ReadAttributeString('PeriodMode');
@@ -427,14 +439,7 @@ class EnergyDashboard extends IPSModule
             return $this->FinalizeTotals($totals, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd), $archiveID, $rangeStart, $rangeEnd);
         }
 
-        $sum = [
-            'pv' => 0.0,
-            'gridImport' => 0.0,
-            'gridExport' => 0.0,
-            'load' => 0.0,
-            'batteryCharge' => 0.0,
-            'batteryDischarge' => 0.0
-        ];
+        $sum = $this->GetEmptyEnergyTotals();
 
         for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
             $vals = $this->ResolveSingleDayTotals($archiveID, $day);
@@ -457,28 +462,14 @@ class EnergyDashboard extends IPSModule
         if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
             $dayValues = $this->ReadHistoricalDayEnergy($archiveID, $dayStart);
             if ($dayValues !== null) {
-                return array_merge([
-                    'pv' => 0.0,
-                    'gridImport' => 0.0,
-                    'gridExport' => 0.0,
-                    'load' => 0.0,
-                    'batteryCharge' => 0.0,
-                    'batteryDischarge' => 0.0
-                ], $dayValues);
+                return array_merge($this->GetEmptyEnergyTotals(), $dayValues);
             }
         }
 
         if ($this->ReadPropertyBoolean('UseHistoricalCounterDiff')) {
             $counterValues = $this->ReadHistoricalCounterDiff($archiveID, $dayStart, $dayEnd);
             if ($counterValues !== null) {
-                return array_merge([
-                    'pv' => 0.0,
-                    'gridImport' => 0.0,
-                    'gridExport' => 0.0,
-                    'load' => 0.0,
-                    'batteryCharge' => 0.0,
-                    'batteryDischarge' => 0.0
-                ], $counterValues);
+                return array_merge($this->GetEmptyEnergyTotals(), $counterValues);
             }
         }
 
@@ -488,14 +479,7 @@ class EnergyDashboard extends IPSModule
 
     private function ReadHistoricalDayEnergyRange(int $archiveID, int $rangeStart, int $rangeEnd): ?array
     {
-        $sum = [
-            'pv' => 0.0,
-            'gridImport' => 0.0,
-            'gridExport' => 0.0,
-            'load' => 0.0,
-            'batteryCharge' => 0.0,
-            'batteryDischarge' => 0.0
-        ];
+        $sum = $this->GetEmptyEnergyTotals();
         $foundAny = false;
 
         for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
@@ -743,14 +727,7 @@ class EnergyDashboard extends IPSModule
 
     private function FinalizeTotals(array $totals, float $batteryDeltaKwh = 0.0, int $archiveID = 0, int $rangeStart = 0, int $rangeEnd = 0): array
     {
-        $totals = array_merge([
-            'pv' => 0.0,
-            'gridImport' => 0.0,
-            'gridExport' => 0.0,
-            'load' => 0.0,
-            'batteryCharge' => 0.0,
-            'batteryDischarge' => 0.0
-        ], $totals);
+        $totals = array_merge($this->GetEmptyEnergyTotals(), $totals);
 
         $totals['selfConsumption'] = round(max(0.0, $totals['pv'] - $totals['gridExport']), 2);
         $totals['netUsage'] = round($totals['load'] - $totals['gridExport'], 2);
@@ -924,36 +901,38 @@ class EnergyDashboard extends IPSModule
     private function GetPeakValuesFromArchive(int $archiveID, int $rangeStart, int $rangeEnd): array
     {
         $mode = $this->ReadAttributeString('PeriodMode');
-        $showTimestamp = $this->ReadPropertyBoolean('ShowPeakTimestamps') && (in_array($mode, ['day', 'week'], true) || $this->ReadPropertyBoolean('ShowPeakTimestampsLong'));
+        $showTimestamp = $this->ReadPropertyBoolean('ShowPeakTimestamps')
+            && (in_array($mode, ['day', 'week'], true) || $this->ReadPropertyBoolean('ShowPeakTimestampsLong'));
 
         $formatTs = function (int $ts) use ($mode): string {
             if ($ts <= 0) {
                 return '';
             }
-            if (in_array($mode, ['day', 'week'], true)) {
-                return date('d.m H:i', $ts);
-            }
-            return date('d.m.Y', $ts);
+            return in_array($mode, ['day', 'week'], true) ? date('d.m H:i', $ts) : date('d.m.Y', $ts);
         };
 
-        $getPeak = function (int $varID, bool $invert, bool $useMin = false, bool $positiveOnly = false) use ($archiveID, $rangeStart, $rangeEnd) {
+        $getAggregationLevel = function () use ($mode): int {
+            switch ($mode) {
+                case 'day':
+                    return 1; // tägliche Aggregation
+                case 'week':
+                    return 2; // wöchentliche Aggregation
+                case 'month':
+                    return 3; // monatliche Aggregation
+                case 'year':
+                    return 4; // jährliche Aggregation
+                default:
+                    return 1;
+            }
+        };
+
+        $getPeak = function (int $varID, bool $invert, bool $useMin = false, bool $positiveOnly = false) use ($archiveID, $rangeStart, $rangeEnd, $getAggregationLevel): array {
             if (!$this->IsValidVar($varID)) {
                 return ['value' => 0.0, 'timestamp' => 0];
             }
 
-            $rangeSeconds = max(1, $rangeEnd - $rangeStart);
-            $aggregation = 0;
-            if ($rangeSeconds > 7 * 86400 && $rangeSeconds <= 120 * 86400) {
-                $aggregation = 1; // hourly
-            } elseif ($rangeSeconds > 120 * 86400) {
-                $aggregation = 2; // daily
-            }
-
-            if ($aggregation === 0) {
-                $rows = @AC_GetLoggedValues($archiveID, $varID, $rangeStart, $rangeEnd, 10000);
-            } else {
-                $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $rangeStart, $rangeEnd, 0);
-            }
+            $aggregation = $getAggregationLevel();
+            $rows = @AC_GetAggregatedValues($archiveID, $varID, $aggregation, $rangeStart, $rangeEnd, 0);
             if (!is_array($rows)) {
                 $rows = [];
             }
@@ -962,23 +941,18 @@ class EnergyDashboard extends IPSModule
             $bestTs = 0;
 
             foreach ($rows as $row) {
-                if ($aggregation === 0) {
-                    if (!isset($row['Value'])) {
+                if ($useMin) {
+                    if (!isset($row['Min'])) {
                         continue;
                     }
-                    $val = (float) $row['Value'];
-                    $ts = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
+                    $val = (float) $row['Min'];
+                    $ts = isset($row['MinTime']) ? (int) $row['MinTime'] : (isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0);
                 } else {
-                    if ($useMin && isset($row['Min'])) {
-                        $val = (float) $row['Min'];
-                    } elseif (!$useMin && isset($row['Max'])) {
-                        $val = (float) $row['Max'];
-                    } elseif (isset($row['Avg'])) {
-                        $val = (float) $row['Avg'];
-                    } else {
+                    if (!isset($row['Max'])) {
                         continue;
                     }
-                    $ts = isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0;
+                    $val = (float) $row['Max'];
+                    $ts = isset($row['MaxTime']) ? (int) $row['MaxTime'] : (isset($row['TimeStamp']) ? (int) $row['TimeStamp'] : 0);
                 }
 
                 $val = $this->ApplySign($val, $invert);
@@ -1011,16 +985,16 @@ class EnergyDashboard extends IPSModule
         $load = $getPeak($this->ReadPropertyInteger('LoadPowerID'), $this->ReadPropertyBoolean('InvertLoad'), false, true);
         $gridImport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), false, true);
         $gridExport = $getPeak($this->ReadPropertyInteger('GridPowerID'), $this->ReadPropertyBoolean('InvertGrid'), true, false);
-        $batteryCharge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), true, false);
-        $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, false);
+        $batteryCharge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), false, false);
+        $batteryDischarge = $getPeak($this->ReadPropertyInteger('BatteryPowerID'), $this->ReadPropertyBoolean('InvertBattery'), true, false);
 
         return [
-            'pv' => ['value' => max(0.0, $pv['value']), 'timestamp' => $showTimestamp ? $pv['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($pv['timestamp']) : ''],
-            'load' => ['value' => max(0.0, $load['value']), 'timestamp' => $showTimestamp ? $load['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($load['timestamp']) : ''],
-            'gridImport' => ['value' => max(0.0, $gridImport['value']), 'timestamp' => $showTimestamp ? $gridImport['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($gridImport['timestamp']) : ''],
-            'gridExport' => ['value' => abs(min(0.0, $gridExport['value'])), 'timestamp' => $showTimestamp ? $gridExport['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($gridExport['timestamp']) : ''],
-            'batteryCharge' => ['value' => abs(min(0.0, $batteryCharge['value'])), 'timestamp' => $showTimestamp ? $batteryCharge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($batteryCharge['timestamp']) : ''],
-            'batteryDischarge' => ['value' => max(0.0, $batteryDischarge['value']), 'timestamp' => $showTimestamp ? $batteryDischarge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs($batteryDischarge['timestamp']) : '']
+            'pv' => ['value' => max(0.0, (float) $pv['value']), 'timestamp' => $showTimestamp ? (int) $pv['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs((int) $pv['timestamp']) : ''],
+            'load' => ['value' => max(0.0, (float) $load['value']), 'timestamp' => $showTimestamp ? (int) $load['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs((int) $load['timestamp']) : ''],
+            'gridImport' => ['value' => max(0.0, (float) $gridImport['value']), 'timestamp' => $showTimestamp ? (int) $gridImport['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs((int) $gridImport['timestamp']) : ''],
+            'gridExport' => ['value' => abs(min(0.0, (float) $gridExport['value'])), 'timestamp' => $showTimestamp ? (int) $gridExport['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs((int) $gridExport['timestamp']) : ''],
+            'batteryCharge' => ['value' => abs((float) $batteryCharge['value']), 'timestamp' => $showTimestamp ? (int) $batteryCharge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs((int) $batteryCharge['timestamp']) : ''],
+            'batteryDischarge' => ['value' => abs((float) $batteryDischarge['value']), 'timestamp' => $showTimestamp ? (int) $batteryDischarge['timestamp'] : 0, 'text' => $showTimestamp ? $formatTs((int) $batteryDischarge['timestamp']) : '']
         ];
     }
 
@@ -1829,8 +1803,7 @@ class EnergyDashboard extends IPSModule
 
         $gridImport = max(0.0, $grid);
         $gridExport = max(0.0, -$grid);
-        $battCharge = max(0.0, -$battery);
-        $battDischarge = max(0.0, $battery);
+        [$battCharge, $battDischarge] = $this->ResolveBatteryChargeDischargeKw($battery, $pv, $gridImport, $gridExport, $load);
 
         $pvRemaining = max(0.0, $pv - $gridExport);
         $pvToBattery = min($battCharge, $pvRemaining);
@@ -1851,6 +1824,24 @@ class EnergyDashboard extends IPSModule
             ['Netz', 'Haus', round($gridToLoad, 3)],
             ['Batterie', 'Haus', round($batteryToLoad, 3)]
         ];
+    }
+
+    private function ResolveBatteryChargeDischargeKw(float $battery, float $pv, float $gridImport, float $gridExport, float $load): array
+    {
+        $chargeDefault = max(0.0, -$battery);
+        $dischargeDefault = max(0.0, $battery);
+
+        $chargeReversed = max(0.0, $battery);
+        $dischargeReversed = max(0.0, -$battery);
+
+        $balanceDefault = abs(($pv + $gridImport + $dischargeDefault) - ($load + $gridExport + $chargeDefault));
+        $balanceReversed = abs(($pv + $gridImport + $dischargeReversed) - ($load + $gridExport + $chargeReversed));
+
+        if ($balanceReversed + 0.02 < $balanceDefault) {
+            return [$chargeReversed, $dischargeReversed];
+        }
+
+        return [$chargeDefault, $dischargeDefault];
     }
 
     private function GetSankeyTooltipMap(array $flows, float $total, string $unit): array
@@ -1941,7 +1932,7 @@ class EnergyDashboard extends IPSModule
             . '<style>.edb-card{background:' . $theme['bg'] . ';border:1px solid ' . $theme['border'] . ';border-radius:18px;padding:16px}.edb-wrap{position:relative;height:300px}.edb-tip{position:absolute;display:none;background:rgba(33,33,33,.96);color:#fff;padding:8px;border-radius:8px;font-size:12px}.edb-sub{font-size:12px;color:' . $theme['muted'] . ';margin-bottom:10px}</style>'
             . '<div class="edb-card"><div style="font-size:20px;font-weight:bold;margin-bottom:6px;">' . $title . '</div><div class="edb-sub">' . htmlspecialchars($label) . '</div><div style="margin-bottom:10px;">' . $valuesHtml . '</div><div class="edb-wrap"><div id="' . $containerId . '" style="width:100%;height:100%;"></div><div id="' . $tipId . '" class="edb-tip"></div></div></div>'
             . '<script src="https://www.gstatic.com/charts/loader.js"></script>'
-            . '<script>(function(){var rows=' . $json . ';var tooltipMap=' . $tooltipJson . ';var theme=' . $themeJson . ';var showPct=' . ($showPercentages ? 'true' : 'false') . ';var liveMode=' . $liveFlag . ';google.charts.load("current",{packages:["sankey"]});google.charts.setOnLoadCallback(draw);function draw(){var data=new google.visualization.DataTable();data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","Wert");data.addRows(rows);var el=document.getElementById("' . $containerId . '");if(!el){return;}var chart=new google.visualization.Sankey(el);chart.draw(data,{height:300,tooltip:{trigger:"none"},sankey:{node:{colors:[theme.pv,theme.house,theme.battery,theme.grid]},link:{colorMode:"gradient",colors:[theme.pv,theme.house,theme.battery,theme.grid]}}});google.visualization.events.addListener(chart,"onmouseover",function(e){if(typeof e.row!=="number"||e.row<0||e.row>=rows.length)return;var from=data.getValue(e.row,0);var to=data.getValue(e.row,1);var meta=tooltipMap[from+"|"+to];if(!meta)return;var tip=document.getElementById("' . $tipId . '");var html="<b>"+from+"→"+to+"</b><br>"+meta.value.toFixed(2)+" "+meta.unit;if(showPct){html+="<br>"+meta.percent.toFixed(1)+" %";}tip.innerHTML=html;tip.style.display="block";});google.visualization.events.addListener(chart,"onmouseout",function(){document.getElementById("' . $tipId . '").style.display="none";});el.addEventListener("mousemove",function(ev){var tip=document.getElementById("' . $tipId . '");tip.style.left=(ev.offsetX+14)+"px";tip.style.top=(ev.offsetY+14)+"px";});}if(liveMode){setInterval(draw,' . $refresh . ');} })();</script>'
+            . '<script>(function(){var rows=' . $json . ';var tooltipMap=' . $tooltipJson . ';var theme=' . $themeJson . ';var showPct=' . ($showPercentages ? 'true' : 'false') . ';var liveMode=' . $liveFlag . ';var refreshMs=' . $refresh . ';var timerKey="edbSankeyTimer_' . $containerId . '";function draw(){var data=new google.visualization.DataTable();data.addColumn("string","Von");data.addColumn("string","Nach");data.addColumn("number","Wert");data.addRows(rows);var el=document.getElementById("' . $containerId . '");if(!el){return;}var chart=new google.visualization.Sankey(el);chart.draw(data,{height:300,tooltip:{trigger:"none"},sankey:{node:{colors:[theme.pv,theme.house,theme.battery,theme.grid]},link:{colorMode:"gradient",colors:[theme.pv,theme.house,theme.battery,theme.grid]}}});google.visualization.events.addListener(chart,"onmouseover",function(e){if(typeof e.row!=="number"||e.row<0||e.row>=rows.length)return;var from=data.getValue(e.row,0);var to=data.getValue(e.row,1);var meta=tooltipMap[from+"|"+to];if(!meta)return;var tip=document.getElementById("' . $tipId . '");var html="<b>"+from+"→"+to+"</b><br>"+meta.value.toFixed(2)+" "+meta.unit;if(showPct){html+="<br>"+meta.percent.toFixed(1)+" %";}tip.innerHTML=html;tip.style.display="block";});google.visualization.events.addListener(chart,"onmouseout",function(){document.getElementById("' . $tipId . '").style.display="none";});el.addEventListener("mousemove",function(ev){var tip=document.getElementById("' . $tipId . '");tip.style.left=(ev.offsetX+14)+"px";tip.style.top=(ev.offsetY+14)+"px";});}function init(){draw();if(liveMode){if(window[timerKey]){clearInterval(window[timerKey]);}window[timerKey]=setInterval(draw,refreshMs);}}if(window.google&&google.visualization&&google.visualization.DataTable){init();}else{google.charts.load("current",{packages:["sankey"]});google.charts.setOnLoadCallback(init);}})();</script>'
             . '</div>';
     }
 
