@@ -403,6 +403,18 @@ class EnergyDashboard extends IPSModule
         return $value;
     }
 
+    private function GetEmptyEnergyTotals(): array
+    {
+        return [
+            'pv' => 0.0,
+            'gridImport' => 0.0,
+            'gridExport' => 0.0,
+            'load' => 0.0,
+            'batteryCharge' => 0.0,
+            'batteryDischarge' => 0.0
+        ];
+    }
+
     private function ResolveTotalsForRange(int $archiveID, int $rangeStart, int $rangeEnd, array $sourceChart): array
     {
         $mode = $this->ReadAttributeString('PeriodMode');
@@ -427,14 +439,7 @@ class EnergyDashboard extends IPSModule
             return $this->FinalizeTotals($totals, $this->GetBatteryContentDeltaKwh($archiveID, $rangeStart, $rangeEnd), $archiveID, $rangeStart, $rangeEnd);
         }
 
-        $sum = [
-            'pv' => 0.0,
-            'gridImport' => 0.0,
-            'gridExport' => 0.0,
-            'load' => 0.0,
-            'batteryCharge' => 0.0,
-            'batteryDischarge' => 0.0
-        ];
+        $sum = $this->GetEmptyEnergyTotals();
 
         for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
             $vals = $this->ResolveSingleDayTotals($archiveID, $day);
@@ -457,28 +462,14 @@ class EnergyDashboard extends IPSModule
         if ($this->ReadPropertyBoolean('UseHistoricalDayEnergy')) {
             $dayValues = $this->ReadHistoricalDayEnergy($archiveID, $dayStart);
             if ($dayValues !== null) {
-                return array_merge([
-                    'pv' => 0.0,
-                    'gridImport' => 0.0,
-                    'gridExport' => 0.0,
-                    'load' => 0.0,
-                    'batteryCharge' => 0.0,
-                    'batteryDischarge' => 0.0
-                ], $dayValues);
+                return array_merge($this->GetEmptyEnergyTotals(), $dayValues);
             }
         }
 
         if ($this->ReadPropertyBoolean('UseHistoricalCounterDiff')) {
             $counterValues = $this->ReadHistoricalCounterDiff($archiveID, $dayStart, $dayEnd);
             if ($counterValues !== null) {
-                return array_merge([
-                    'pv' => 0.0,
-                    'gridImport' => 0.0,
-                    'gridExport' => 0.0,
-                    'load' => 0.0,
-                    'batteryCharge' => 0.0,
-                    'batteryDischarge' => 0.0
-                ], $counterValues);
+                return array_merge($this->GetEmptyEnergyTotals(), $counterValues);
             }
         }
 
@@ -488,14 +479,7 @@ class EnergyDashboard extends IPSModule
 
     private function ReadHistoricalDayEnergyRange(int $archiveID, int $rangeStart, int $rangeEnd): ?array
     {
-        $sum = [
-            'pv' => 0.0,
-            'gridImport' => 0.0,
-            'gridExport' => 0.0,
-            'load' => 0.0,
-            'batteryCharge' => 0.0,
-            'batteryDischarge' => 0.0
-        ];
+        $sum = $this->GetEmptyEnergyTotals();
         $foundAny = false;
 
         for ($day = strtotime(date('Y-m-d 00:00:00', $rangeStart)); $day < $rangeEnd; $day = strtotime('+1 day', $day)) {
@@ -743,14 +727,7 @@ class EnergyDashboard extends IPSModule
 
     private function FinalizeTotals(array $totals, float $batteryDeltaKwh = 0.0, int $archiveID = 0, int $rangeStart = 0, int $rangeEnd = 0): array
     {
-        $totals = array_merge([
-            'pv' => 0.0,
-            'gridImport' => 0.0,
-            'gridExport' => 0.0,
-            'load' => 0.0,
-            'batteryCharge' => 0.0,
-            'batteryDischarge' => 0.0
-        ], $totals);
+        $totals = array_merge($this->GetEmptyEnergyTotals(), $totals);
 
         $totals['selfConsumption'] = round(max(0.0, $totals['pv'] - $totals['gridExport']), 2);
         $totals['netUsage'] = round($totals['load'] - $totals['gridExport'], 2);
