@@ -339,8 +339,7 @@
           "name": "SolarForecastHourID",
           "caption": "Solar Forecast Stunde",
           "validVariableTypes": [
-            1,
-            2
+            3
           ],
           "width": "420px"
         },
