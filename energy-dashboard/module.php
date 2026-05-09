@@ -1248,14 +1248,17 @@ class EnergyDashboard extends IPSModule
                 $grid = (float) $aligned['grid'][$i - 1];
                 $load = max(0.0, (float) $aligned['load'][$i - 1]);
                 $battery = (float) $aligned['battery'][$i - 1];
+                $gridImport = max(0.0, $grid);
+                $gridExport = max(0.0, -$grid);
+                [$batteryChargeKw, $batteryDischargeKw] = $this->ResolveBatteryChargeDischargeKw($battery, $pv, $gridImport, $gridExport, $load);
 
                 $buckets[] = [
                     'label' => ($mode === 'day') ? date('H:i', $from) : date('d.m H:i', $from),
                     'pvToLoad' => round(min($pv, $load) * $dtHours, 3),
-                    'gridImport' => round(max(0.0, $grid) * $dtHours, 3),
-                    'batteryCharge' => round(max(0.0, -$battery) * $dtHours, 3),
-                    'batteryDischarge' => round(max(0.0, $battery) * $dtHours, 3),
-                    'gridExport' => round(max(0.0, -$grid) * $dtHours, 3)
+                    'gridImport' => round($gridImport * $dtHours, 3),
+                    'batteryCharge' => round($batteryChargeKw * $dtHours, 3),
+                    'batteryDischarge' => round($batteryDischargeKw * $dtHours, 3),
+                    'gridExport' => round($gridExport * $dtHours, 3)
                 ];
             }
 
@@ -1559,11 +1562,15 @@ class EnergyDashboard extends IPSModule
                 $gridExport += abs($grid) * $dtHours;
             }
 
-            if ($battery >= 0) {
-                $batteryDischarge += $battery * $dtHours;
-            } else {
-                $batteryCharge += abs($battery) * $dtHours;
-            }
+            [$batteryChargeKw, $batteryDischargeKw] = $this->ResolveBatteryChargeDischargeKw(
+                $battery,
+                $pv,
+                max(0.0, $grid),
+                max(0.0, -$grid),
+                $load
+            );
+            $batteryCharge += $batteryChargeKw * $dtHours;
+            $batteryDischarge += $batteryDischargeKw * $dtHours;
         }
 
         return [
