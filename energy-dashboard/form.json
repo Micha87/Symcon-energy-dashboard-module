@@ -324,6 +324,55 @@
         }
       ]
     },
+
+    {
+      "type": "ExpansionPanel",
+      "caption": "Solar Forecast (optional)",
+      "items": [
+        {
+          "type": "CheckBox",
+          "name": "ShowSolarForecastInSources",
+          "caption": "Solar Forecast im Stromquellen-Chart anzeigen"
+        },
+        {
+          "type": "SelectVariable",
+          "name": "SolarForecastHourID",
+          "caption": "Solar Forecast Stunde",
+          "validVariableTypes": [
+            1,
+            2
+          ],
+          "width": "420px"
+        },
+        {
+          "type": "Select",
+          "name": "SolarForecastHourUnit",
+          "caption": "Einheit Solar Forecast Stunde",
+          "options": [
+            {
+              "caption": "kWh pro Stunde / kW Durchschnitt",
+              "value": "kwh"
+            },
+            {
+              "caption": "Wh pro Stunde",
+              "value": "wh"
+            },
+            {
+              "caption": "kW",
+              "value": "kw"
+            },
+            {
+              "caption": "W",
+              "value": "w"
+            }
+          ]
+        },
+        {
+          "type": "Label",
+          "caption": "Die Variable sollte archiviert sein. Stunden-kWh werden im kW-Chart als durchschnittliche kW der Stunde dargestellt."
+        }
+      ]
+    },
     {
       "type": "ExpansionPanel",
       "caption": "Peak-Werte (optional)",
