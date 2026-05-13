@@ -56,6 +56,9 @@ class EnergyDashboard extends IPSModule
         $this->RegisterPropertyString('BatteryUsableCapacityKwh', '0');
         $this->RegisterPropertyInteger('BatteryCyclesID', 0);
         $this->RegisterPropertyBoolean('ShowSocOverlay', true);
+        $this->RegisterPropertyBoolean('ShowSolarForecastInSources', false);
+        $this->RegisterPropertyInteger('SolarForecastHourID', 0);
+        $this->RegisterPropertyString('SolarForecastHourUnit', 'kwh');
 
         $this->RegisterPropertyBoolean('EnableTargetComparison', false);
         $this->RegisterPropertyInteger('PvTargetDayID', 0);
@@ -826,7 +829,59 @@ class EnergyDashboard extends IPSModule
         return $result;
     }
 
+    private function ConvertSolarForecastHourValue(float $value): float
+    {
+        switch ($this->ReadPropertyString('SolarForecastHourUnit')) {
+            case 'w':
+            case 'wh':
+                $value /= 1000.0;
+                break;
+            case 'kw':
+            case 'kwh':
+            default:
+                break;
+        }
 
+        return round(max(0.0, $value), 3);
+    }
+
+    private function GetSolarForecastSeries(int $archiveID, int $start, int $end, int $aggregation): array
+    {
+        if (!$this->ReadPropertyBoolean('ShowSolarForecastInSources')) {
+            return [];
+        }
+
+        $rows = $this->GetAggregatedSeriesRaw($archiveID, $this->ReadPropertyInteger('SolarForecastHourID'), $aggregation, $start, $end);
+        foreach ($rows as $ts => $value) {
+            $rows[$ts] = $this->ConvertSolarForecastHourValue((float) $value);
+        }
+
+        return $rows;
+    }
+
+    private function MapSeriesToTimestamps(array $timestamps, array $series): array
+    {
+        if (count($series) === 0) {
+            return [];
+        }
+
+        ksort($series);
+        $seriesTimestamps = array_keys($series);
+        $index = 0;
+        $lastValue = null;
+        $mapped = [];
+
+        foreach ($timestamps as $timestamp) {
+            $timestamp = (int) $timestamp;
+            while ($index < count($seriesTimestamps) && (int) $seriesTimestamps[$index] <= $timestamp) {
+                $lastValue = (float) $series[$seriesTimestamps[$index]];
+                $index++;
+            }
+            $mapped[] = $lastValue === null ? null : round($lastValue, 3);
+        }
+
+        return $mapped;
+    }
 
     private function GetPeakAggregationLevel(): int
     {
@@ -1181,6 +1236,10 @@ class EnergyDashboard extends IPSModule
             $aligned['unit'] = 'kW';
             $aligned['chartType'] = 'line';
             $aligned['soc'] = [];
+            $aligned['forecast'] = $this->MapSeriesToTimestamps(
+                $aligned['timestamps'],
+                $this->GetSolarForecastSeries($archiveID, $start, $end, $aggregation)
+            );
 
             if ($mode === 'day' && $this->ReadPropertyBoolean('ShowSocOverlay') && $this->IsValidVar($this->ReadPropertyInteger('BatterySocID'))) {
                 $socRows = $this->GetAggregatedSeriesRaw(
@@ -1248,14 +1307,17 @@ class EnergyDashboard extends IPSModule
                 $grid = (float) $aligned['grid'][$i - 1];
                 $load = max(0.0, (float) $aligned['load'][$i - 1]);
                 $battery = (float) $aligned['battery'][$i - 1];
+                $gridImport = max(0.0, $grid);
+                $gridExport = max(0.0, -$grid);
+                [$batteryChargeKw, $batteryDischargeKw] = $this->ResolveBatteryChargeDischargeKw($battery, $pv, $gridImport, $gridExport, $load);
 
                 $buckets[] = [
                     'label' => ($mode === 'day') ? date('H:i', $from) : date('d.m H:i', $from),
                     'pvToLoad' => round(min($pv, $load) * $dtHours, 3),
-                    'gridImport' => round(max(0.0, $grid) * $dtHours, 3),
-                    'batteryCharge' => round(max(0.0, -$battery) * $dtHours, 3),
-                    'batteryDischarge' => round(max(0.0, $battery) * $dtHours, 3),
-                    'gridExport' => round(max(0.0, -$grid) * $dtHours, 3)
+                    'gridImport' => round($gridImport * $dtHours, 3),
+                    'batteryCharge' => round($batteryChargeKw * $dtHours, 3),
+                    'batteryDischarge' => round($batteryDischargeKw * $dtHours, 3),
+                    'gridExport' => round($gridExport * $dtHours, 3)
                 ];
             }
 
@@ -1559,11 +1621,15 @@ class EnergyDashboard extends IPSModule
                 $gridExport += abs($grid) * $dtHours;
             }
 
-            if ($battery >= 0) {
-                $batteryDischarge += $battery * $dtHours;
-            } else {
-                $batteryCharge += abs($battery) * $dtHours;
-            }
+            [$batteryChargeKw, $batteryDischargeKw] = $this->ResolveBatteryChargeDischargeKw(
+                $battery,
+                $pv,
+                max(0.0, $grid),
+                max(0.0, -$grid),
+                $load
+            );
+            $batteryCharge += $batteryChargeKw * $dtHours;
+            $batteryDischarge += $batteryDischargeKw * $dtHours;
         }
 
         return [
@@ -1947,7 +2013,8 @@ class EnergyDashboard extends IPSModule
             'grid' => $data['grid'],
             'load' => $data['load'],
             'battery' => $data['battery'],
-            'soc' => $data['soc'] ?? []
+            'soc' => $data['soc'] ?? [],
+            'forecast' => $data['forecast'] ?? []
         ];
         $json = json_encode($chartPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $themeJson = json_encode($theme, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1971,14 +2038,16 @@ class EnergyDashboard extends IPSModule
             . 'const enableHoverDebug=' . $enableHoverDebug . ';'
             . 'const hoverState={key:null};'
             . 'const datasets=['
-            . '{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:.25,pointRadius:0,borderWidth:2},'
+            . '{label:"PV",data:d.pv,borderColor:theme.pv,backgroundColor:theme.pvFill,fill:false,tension:0,pointRadius:function(ctx){if(!Array.isArray(d.pv)||d.pv.length===0){return 0;}var maxVal=Math.max.apply(null,d.pv);return ctx.dataIndex===d.pv.indexOf(maxVal)?5:0;},pointHoverRadius:function(ctx){if(!Array.isArray(d.pv)||d.pv.length===0){return 0;}var maxVal=Math.max.apply(null,d.pv);return ctx.dataIndex===d.pv.indexOf(maxVal)?7:3;},pointBackgroundColor:theme.pv,pointBorderColor:"#ffffff",pointBorderWidth:1.5,borderWidth:2},'
             . '{label:"Netz",data:d.grid,borderColor:theme.grid,backgroundColor:theme.gridFill,fill:false,tension:.2,pointRadius:0,borderWidth:2},'
             . '{label:"Verbrauch",data:d.load,borderColor:(theme.mode==="dark" ? "#e0e0e0" : "#000000"),backgroundColor:(theme.mode==="dark" ? "rgba(224,224,224,.12)" : "rgba(0,0,0,.10)"),borderDash:[6,4],tension:.15,pointRadius:0,borderWidth:3},'
             . '{label:"Batterie",data:d.battery,borderColor:theme.battery,backgroundColor:theme.batteryFill,fill:false,tension:.15,pointRadius:0,borderWidth:2.5}'
             . '];'
+            . 'if(Array.isArray(d.forecast)&&d.forecast.length>0){datasets.push({label:"Solar Forecast (Std.)",data:d.forecast,borderColor:"rgba(255,193,7,0.95)",backgroundColor:"rgba(255,193,7,0.08)",borderDash:[8,4],fill:false,tension:0,pointRadius:2,pointHoverRadius:5,borderWidth:2});}'
             . 'if(Array.isArray(d.soc)&&d.soc.length>0){datasets.push({label:"SoC",data:d.soc,borderColor:theme.soc,backgroundColor:theme.socFill,borderDash:[4,4],fill:false,tension:.15,pointRadius:0,borderWidth:2,yAxisID:"ySoc"});}'
             . 'const peakPlugin={id:"pvLoadPeakPlugin",afterEvent(chart,args){if(!enableHoverDebug||!showMarkers){return;}const ev=args.event;if(!ev){return;}const active=chart.getElementsAtEventForMode(ev.native||ev,"nearest",{intersect:false},false);let newKey=null;if(active&&active.length>0){const a=active[0];if(markers.pv&&a.datasetIndex===0&&a.index===markers.pv.index){newKey="pv";}if(markers.load&&a.datasetIndex===2&&a.index===markers.load.index){newKey="load";}}if(newKey!==hoverState.key){hoverState.key=newKey;chart.draw();}},afterDatasetsDraw(chart){if(!showMarkers){return;}const ctx=chart.ctx;ctx.save();function drawMarker(datasetIndex,marker,color,key){if(!marker||marker.index===null||marker.index===undefined){return;}const meta=chart.getDatasetMeta(datasetIndex);if(!meta||!meta.data||!meta.data[marker.index]){return;}const point=meta.data[marker.index];const x=point.x;const y=point.y;const active=(hoverState.key===key);const radius=active?8:6;ctx.beginPath();ctx.arc(x,y,radius,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();ctx.lineWidth=active?3:2;ctx.strokeStyle="#ffffff";ctx.stroke();if(active){ctx.beginPath();ctx.arc(x,y,radius+5,0,2*Math.PI);ctx.strokeStyle="rgba(255,255,255,0.75)";ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.moveTo(x,chart.chartArea.top);ctx.lineTo(x,chart.chartArea.bottom);ctx.strokeStyle="rgba(128,128,128,0.35)";ctx.lineWidth=1;ctx.stroke();}const text=marker.label+": "+Number(marker.value).toFixed(2)+" kW";ctx.font="12px Arial";const tw=ctx.measureText(text).width;ctx.fillStyle=(theme.mode==="dark"||theme.bg==="transparent")?(active?"rgba(28,28,28,0.98)":"rgba(24,24,24,0.96)"):(active?"rgba(255,255,255,0.96)":"rgba(255,255,255,0.88)");ctx.fillRect(x+8,y-22,tw+8,16);ctx.strokeStyle=(theme.mode==="dark"||theme.bg==="transparent")?"rgba(255,255,255,0.16)":"rgba(0,0,0,0.12)";ctx.lineWidth=1;ctx.strokeRect(x+8,y-22,tw+8,16);ctx.fillStyle=color;ctx.textAlign="left";ctx.textBaseline="bottom";ctx.fillText(text,x+12,y-8);}drawMarker(0,markers.pv,theme.pv,"pv");drawMarker(2,markers.load,(theme.mode==="dark" ? "#e0e0e0" : "#000000"),"load");ctx.restore();}};'
-            . 'new Chart(document.getElementById("edbSourceChart"),{type:"' . $typeEsc . '",data:{labels:d.labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}},tooltip:{backgroundColor:(theme.mode==="dark"||theme.bg==="transparent")?"rgba(24,24,24,0.96)":"rgba(255,255,255,0.96)",titleColor:(theme.mode==="dark"||theme.bg==="transparent")?"#f2f2f2":"#111111",bodyColor:(theme.mode==="dark"||theme.bg==="transparent")?"#f2f2f2":"#111111",borderColor:(theme.mode==="dark"||theme.bg==="transparent")?"rgba(255,255,255,0.16)":"rgba(0,0,0,0.12)",borderWidth:1,padding:10,displayColors:true,boxPadding:4,callbacks:{labelColor:function(context){const label=(context.dataset&&context.dataset.label)||"";const map={"PV":theme.pv,"Netz":theme.grid,"Verbrauch":(theme.mode==="dark"?"#e0e0e0":"#000000"),"Batterie":theme.battery,"SoC":theme.soc};const c=map[label]||theme.text;return {borderColor:c,backgroundColor:c};}}}},scales:{y:{ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"' . $unitEsc . '",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}},plugins:[peakPlugin]});'
+            . 'const allPowerValues=[].concat(d.pv||[],d.grid||[],d.load||[],d.battery||[],d.forecast||[]).map(function(v){return Number(v);}).filter(function(v){return isFinite(v);});const seriesMax=allPowerValues.length?Math.max.apply(null,allPowerValues):0;const peakMarkerValues=[markers&&markers.pv?Number(markers.pv.value):NaN,markers&&markers.load?Number(markers.load.value):NaN].filter(function(v){return isFinite(v);});const peakMax=peakMarkerValues.length?Math.max.apply(null,peakMarkerValues):0;const axisMax=Math.max(1,seriesMax,peakMax);const suggestedMax=Math.ceil(axisMax*1.1);'
+            . 'new Chart(document.getElementById("edbSourceChart"),{type:"' . $typeEsc . '",data:{labels:d.labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{color:theme.text}},tooltip:{backgroundColor:(theme.mode==="dark"||theme.bg==="transparent")?"rgba(24,24,24,0.96)":"rgba(255,255,255,0.96)",titleColor:(theme.mode==="dark"||theme.bg==="transparent")?"#f2f2f2":"#111111",bodyColor:(theme.mode==="dark"||theme.bg==="transparent")?"#f2f2f2":"#111111",borderColor:(theme.mode==="dark"||theme.bg==="transparent")?"rgba(255,255,255,0.16)":"rgba(0,0,0,0.12)",borderWidth:1,padding:10,displayColors:true,boxPadding:4,callbacks:{labelColor:function(context){const label=(context.dataset&&context.dataset.label)||"";const map={"PV":theme.pv,"Netz":theme.grid,"Verbrauch":(theme.mode==="dark"?"#e0e0e0":"#000000"),"Batterie":theme.battery,"SoC":theme.soc,"Solar Forecast (Std.)":"rgba(255,193,7,0.95)"};const c=map[label]||theme.text;return {borderColor:c,backgroundColor:c};}}}},scales:{y:{suggestedMin:0,suggestedMax:suggestedMax,ticks:{color:theme.text},grid:{color:"rgba(128,128,128,0.15)"},title:{display:true,text:"' . $unitEsc . '",color:theme.text}},ySoc:{display:(Array.isArray(d.soc)&&d.soc.length>0),position:"right",min:0,max:100,ticks:{color:theme.text},grid:{drawOnChartArea:false},title:{display:true,text:"SoC %",color:theme.text}},x:{ticks:{color:theme.text,maxTicksLimit:(d.labels.length > 30 ? 16 : 12),autoSkip:true,maxRotation:0,minRotation:0,callback:function(value){const lbl=this.getLabelForValue(value);return (typeof lbl==="string") ? lbl : value;}},grid:{color:"rgba(128,128,128,0.15)"}}}},plugins:[peakPlugin]});'
             . '})();</script>'
             . '</div>';
     }
